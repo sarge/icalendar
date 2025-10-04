@@ -21,7 +21,8 @@ defmodule ICalendar.Event do
             modified: nil,
             organizer: nil,
             sequence: nil,
-            attendees: []
+            attendees: [],
+            x_wr_timezone: nil
 end
 
 defimpl ICalendar.Serialize, for: ICalendar.Event do

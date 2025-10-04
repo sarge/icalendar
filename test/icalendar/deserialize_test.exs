@@ -82,7 +82,9 @@ defmodule ICalendar.DeserializeTest do
 
       [event] = ICalendar.from_ics(ics)
       assert event.dtstart.time_zone == "America/Chicago"
+      assert DateTime.to_string(event.dtstart) == "2222-12-24 08:30:00-06:00 CST America/Chicago"
       assert event.dtend.time_zone == "America/Chicago"
+      assert  DateTime.to_string(event.dtend) == "2222-12-24 08:45:00-06:00 CST America/Chicago"
     end
 
     test "with CR+LF line endings" do
@@ -117,5 +119,88 @@ defmodule ICalendar.DeserializeTest do
       [event] = ICalendar.from_ics(ics)
       assert event.url == "http://google.com"
     end
+
+    # hanging date, returns as DateTime at midnight UTC
+    test "with Date (no time)" do
+      ics = """
+      BEGIN:VEVENT
+      DTSTART;VALUE=DATE:20251114
+      DTEND;VALUE=DATE:20251115
+      END:VEVENT
+      """
+
+      [event] = ICalendar.from_ics(ics)
+      assert event.dtstart == ~U[2025-11-14 00:00:00Z]
+      assert event.dtend == ~U[2025-11-15 00:00:00Z]
+    end
+
+    # hanging date with X-WR-TIMEZONE assume the date is in that timezone
+    # and convert to UTC
+    test "with Date (no time) with X-WR-TIMEZONE" do
+      ics = """
+      BEGIN:VCALENDAR
+      X-WR-TIMEZONE:Pacific/Auckland
+      BEGIN:VEVENT
+      DTSTART;VALUE=DATE:20251114
+      DTEND;VALUE=DATE:20251115
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      [event] = ICalendar.from_ics(ics)
+      assert event.dtstart == ~U[2025-11-13 11:00:00Z]
+      assert event.dtend == ~U[2025-11-14 11:00:00Z]
+    end
+
+    test "with DateTime (UTC) with X-WR-TIMEZONE, the X-WR-TIMEZONE should be ignored" do
+      ics = """
+      BEGIN:VCALENDAR
+      X-WR-TIMEZONE:Pacific/Auckland
+      BEGIN:VEVENT
+      DTEND:20151224T084500Z
+      DTSTART:20151224T083000Z
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      [event] = ICalendar.from_ics(ics)
+      assert event.dtstart == ~U[2015-12-24 08:30:00Z]
+      assert event.dtend == ~U[2015-12-24 08:45:00Z]
+    end
+
+    test "with DateTime (hanging) with X-WR-TIMEZONE, the X-WR-TIMEZONE should be applied" do
+      ics = """
+      BEGIN:VCALENDAR
+      X-WR-TIMEZONE:Pacific/Auckland
+      BEGIN:VEVENT
+      DTEND:20151224T084500
+      DTSTART:20151224T083000
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      [event] = ICalendar.from_ics(ics)
+      assert event.dtstart == ~U[2015-12-23 19:30:00Z]
+      assert event.dtend == ~U[2015-12-23 19:45:00Z]
+    end
+
+    test "with DateTime (with TZID) and X-WR-TIMEZONE, the X-WR-TIMEZONE should be ignored" do
+      ics = """
+      BEGIN:VCALENDAR
+      X-WR-TIMEZONE:Pacific/Auckland
+      BEGIN:VEVENT
+      DTEND;TZID=America/Chicago:22221224T084500
+      DTSTART;TZID=America/Chicago:22221224T083000
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      [event] = ICalendar.from_ics(ics)
+      assert event.dtstart.time_zone == "America/Chicago"
+      assert DateTime.to_string(event.dtstart) == "2222-12-24 08:30:00-06:00 CST America/Chicago"
+      assert event.dtend.time_zone == "America/Chicago"
+      assert  DateTime.to_string(event.dtend) == "2222-12-24 08:45:00-06:00 CST America/Chicago"
+    end
+
   end
 end
