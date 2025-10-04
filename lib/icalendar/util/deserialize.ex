@@ -113,7 +113,7 @@ defmodule ICalendar.Util.Deserialize do
         acc
       ) do
     exdates = Map.get(acc, :exdates, [])
-    {:ok, timestamp} = to_date(exdate, params, nil)
+    {:ok, timestamp} = to_date(exdate, params, acc.x_wr_timezone)
     %{acc | exdates: [timestamp | exdates]}
   end
 

@@ -202,5 +202,106 @@ defmodule ICalendar.DeserializeTest do
       assert  DateTime.to_string(event.dtend) == "2222-12-24 08:45:00-06:00 CST America/Chicago"
     end
 
+    test "recurring event with Date (no time) values" do
+      ics = """
+      BEGIN:VEVENT
+      RRULE:FREQ=DAILY;COUNT=3
+      DTSTART;VALUE=DATE:20251114
+      DTEND;VALUE=DATE:20251115
+      SUMMARY:All day recurring event
+      END:VEVENT
+      """
+
+      [event] = ICalendar.from_ics(ics)
+      assert event.dtstart == ~U[2025-11-14 00:00:00Z]
+      assert event.dtend == ~U[2025-11-15 00:00:00Z]
+      assert event.rrule.freq == "DAILY"
+      assert event.rrule.count == 3
+    end
+
+    test "recurring event with Date (no time) values and X-WR-TIMEZONE" do
+      ics = """
+      BEGIN:VCALENDAR
+      X-WR-TIMEZONE:Pacific/Auckland
+      BEGIN:VEVENT
+      RRULE:FREQ=WEEKLY;COUNT=2
+      DTSTART;VALUE=DATE:20251114
+      DTEND;VALUE=DATE:20251115
+      SUMMARY:All day recurring event with timezone
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      [event] = ICalendar.from_ics(ics)
+      # Date should be interpreted as midnight in Pacific/Auckland and converted to UTC
+      # November 2025: Pacific/Auckland is UTC+13 (daylight saving time)
+      assert event.dtstart == ~U[2025-11-13 11:00:00Z]
+      assert event.dtend == ~U[2025-11-14 11:00:00Z]
+      assert event.rrule.freq == "WEEKLY"
+      assert event.rrule.count == 2
+    end
+
+    test "recurring event with Date (no time) values and UNTIL as date" do
+      ics = """
+      BEGIN:VEVENT
+      RRULE:FREQ=DAILY;UNTIL=20251117
+      DTSTART;VALUE=DATE:20251114
+      DTEND;VALUE=DATE:20251115
+      SUMMARY:All day recurring event with date until
+      END:VEVENT
+      """
+
+      [event] = ICalendar.from_ics(ics)
+      assert event.dtstart == ~U[2025-11-14 00:00:00Z]
+      assert event.dtend == ~U[2025-11-15 00:00:00Z]
+      assert event.rrule.freq == "DAILY"
+      # UNTIL should be parsed as a date (converted to DateTime at end of day)
+      assert event.rrule.until == ~U[2025-11-17 00:00:00Z]
+    end
+
+    test "recurring event with Date (no time) values and EXDATE as date" do
+      ics = """
+      BEGIN:VEVENT
+      RRULE:FREQ=DAILY;COUNT=5
+      DTSTART;VALUE=DATE:20251114
+      DTEND;VALUE=DATE:20251115
+      EXDATE;VALUE=DATE:20251116
+      SUMMARY:All day recurring event with exception date
+      END:VEVENT
+      """
+
+      [event] = ICalendar.from_ics(ics)
+      assert event.dtstart == ~U[2025-11-14 00:00:00Z]
+      assert event.dtend == ~U[2025-11-15 00:00:00Z]
+      assert event.rrule.freq == "DAILY"
+      assert event.rrule.count == 5
+      # EXDATE should be parsed as date (midnight UTC)
+      assert event.exdates == [~U[2025-11-16 00:00:00Z]]
+    end
+
+    test "recurring event with Date (no time) values, EXDATE and X-WR-TIMEZONE" do
+      ics = """
+      BEGIN:VCALENDAR
+      X-WR-TIMEZONE:Pacific/Auckland
+      BEGIN:VEVENT
+      RRULE:FREQ=DAILY;COUNT=5
+      DTSTART;VALUE=DATE:20251114
+      DTEND;VALUE=DATE:20251115
+      EXDATE;VALUE=DATE:20251116
+      SUMMARY:All day recurring event with exception date and timezone
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      [event] = ICalendar.from_ics(ics)
+      # Dates should be interpreted as midnight in Pacific/Auckland and converted to UTC
+      assert event.dtstart == ~U[2025-11-13 11:00:00Z]
+      assert event.dtend == ~U[2025-11-14 11:00:00Z]
+      assert event.rrule.freq == "DAILY"
+      assert event.rrule.count == 5
+      # EXDATE should also be interpreted in the timezone and converted to UTC
+      assert event.exdates == [~U[2025-11-15 11:00:00Z]]
+    end
+
   end
 end

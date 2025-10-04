@@ -202,4 +202,153 @@ defmodule ICalendar.RecurrenceTest do
     [event] = events
     assert event.dtstart == ~U[2020-10-14 14:30:00Z]
   end
+
+  test "daily recurring event with date-only values" do
+    events =
+      """
+      BEGIN:VCALENDAR
+      CALSCALE:GREGORIAN
+      VERSION:2.0
+      BEGIN:VEVENT
+      RRULE:FREQ=DAILY;COUNT=4
+      DTSTART;VALUE=DATE:20251114
+      DTEND;VALUE=DATE:20251115
+      SUMMARY:Daily all-day event
+      END:VEVENT
+      END:VCALENDAR
+      """
+      |> ICalendar.from_ics()
+      |> Enum.map(fn event ->
+        recurrences =
+          ICalendar.Recurrence.get_recurrences(event)
+          |> Enum.to_list()
+
+        [event | recurrences]
+      end)
+      |> List.flatten()
+
+    assert events |> Enum.count() == 4
+
+    [event | events] = events
+    assert event.dtstart == ~U[2025-11-14 00:00:00Z]
+    [event | events] = events
+    assert event.dtstart == ~U[2025-11-15 00:00:00Z]
+    [event | events] = events
+    assert event.dtstart == ~U[2025-11-16 00:00:00Z]
+    [event] = events
+    assert event.dtstart == ~U[2025-11-17 00:00:00Z]
+  end
+
+  test "weekly recurring event with date-only values and X-WR-TIMEZONE" do
+    events =
+      """
+      BEGIN:VCALENDAR
+      CALSCALE:GREGORIAN
+      VERSION:2.0
+      X-WR-TIMEZONE:Pacific/Auckland
+      BEGIN:VEVENT
+      RRULE:FREQ=WEEKLY;COUNT=3
+      DTSTART;VALUE=DATE:20251114
+      DTEND;VALUE=DATE:20251115
+      SUMMARY:Weekly all-day event with timezone
+      END:VEVENT
+      END:VCALENDAR
+      """
+      |> ICalendar.from_ics()
+      |> Enum.map(fn event ->
+        recurrences =
+          ICalendar.Recurrence.get_recurrences(event)
+          |> Enum.to_list()
+
+        [event | recurrences]
+      end)
+      |> List.flatten()
+
+    assert events |> Enum.count() == 3
+
+    [event | events] = events
+    # November 2025: Pacific/Auckland is UTC+13 (daylight saving time)
+    # Midnight in Auckland = 11:00 UTC previous day
+    assert event.dtstart == ~U[2025-11-13 11:00:00Z]
+    [event | events] = events
+    assert event.dtstart == ~U[2025-11-20 11:00:00Z]
+    [event] = events
+    assert event.dtstart == ~U[2025-11-27 11:00:00Z]
+  end
+
+  test "monthly recurring event with date-only values and UNTIL" do
+    events =
+      """
+      BEGIN:VCALENDAR
+      CALSCALE:GREGORIAN
+      VERSION:2.0
+      BEGIN:VEVENT
+      RRULE:FREQ=MONTHLY;UNTIL=20260314
+      DTSTART;VALUE=DATE:20251114
+      DTEND;VALUE=DATE:20251115
+      SUMMARY:Monthly all-day event with date until
+      END:VEVENT
+      END:VCALENDAR
+      """
+      |> ICalendar.from_ics()
+      |> Enum.map(fn event ->
+        recurrences =
+          ICalendar.Recurrence.get_recurrences(event)
+          |> Enum.to_list()
+
+        [event | recurrences]
+      end)
+      |> List.flatten()
+
+    assert events |> Enum.count() == 5
+
+    [event | events] = events
+    assert event.dtstart == ~U[2025-11-14 00:00:00Z]
+    [event | events] = events
+    assert event.dtstart == ~U[2025-12-14 00:00:00Z]
+    [event | events] = events
+    assert event.dtstart == ~U[2026-01-14 00:00:00Z]
+    [event | events] = events
+    assert event.dtstart == ~U[2026-02-14 00:00:00Z]
+    [event] = events
+    assert event.dtstart == ~U[2026-03-14 00:00:00Z]
+  end
+
+  test "recurring event with date-only values and EXDATE" do
+    events =
+      """
+      BEGIN:VCALENDAR
+      CALSCALE:GREGORIAN
+      VERSION:2.0
+      BEGIN:VEVENT
+      RRULE:FREQ=DAILY;COUNT=5
+      DTSTART;VALUE=DATE:20251114
+      DTEND;VALUE=DATE:20251115
+      EXDATE;VALUE=DATE:20251116
+      EXDATE;VALUE=DATE:20251117
+      SUMMARY:Daily all-day event with exception dates
+      END:VEVENT
+      END:VCALENDAR
+      """
+      |> ICalendar.from_ics()
+      |> Enum.map(fn event ->
+        recurrences =
+          ICalendar.Recurrence.get_recurrences(event)
+          |> Enum.to_list()
+
+        [event | recurrences]
+      end)
+      |> List.flatten()
+
+    # Should have 3 events (5 count minus 2 excluded dates)
+    assert events |> Enum.count() == 3
+
+    [event | events] = events
+    assert event.dtstart == ~U[2025-11-14 00:00:00Z]
+    [event | events] = events
+    assert event.dtstart == ~U[2025-11-15 00:00:00Z]
+    # 2025-11-16 and 2025-11-17 are excluded
+    [event] = events
+    assert event.dtstart == ~U[2025-11-18 00:00:00Z]
+  end
 end
