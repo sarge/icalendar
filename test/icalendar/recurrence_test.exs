@@ -351,4 +351,66 @@ defmodule ICalendar.RecurrenceTest do
     [event] = events
     assert event.dtstart == ~U[2025-11-18 00:00:00Z]
   end
+
+  test "weekly recurring event with date-only values and BYDAY" do
+    events =
+      """
+      BEGIN:VCALENDAR
+      PRODID:-//Google Inc//Google Calendar 70.9054//EN
+      VERSION:2.0
+      CALSCALE:GREGORIAN
+      X-WR-CALNAME:Liberation
+      X-WR-TIMEZONE:Pacific/Auckland
+      BEGIN:VEVENT
+      DTSTART;VALUE=DATE:20251114
+      DTEND;VALUE=DATE:20251115
+      RRULE:FREQ=WEEKLY;WKST=SU;INTERVAL=2;BYDAY=FR
+      DTSTAMP:20251002T041046Z
+      UID:55v24sq3ih6oto8ib9bu4a7352@google.com
+      CREATED:20251002T041045Z
+      DESCRIPTION:
+      LAST-MODIFIED:20251002T041046Z
+      LOCATION:
+      SEQUENCE:0
+      STATUS:CONFIRMED
+      SUMMARY:Fridays off
+      TRANSP:TRANSPARENT
+      END:VEVENT
+      END:VCALENDAR
+      """
+      |> ICalendar.from_ics()
+      |> Enum.map(fn event ->
+        # Provide explicit end date to ensure recurrences are generated
+        end_date = ~U[2027-01-01 00:00:00Z]
+
+        recurrences =
+          ICalendar.Recurrence.get_recurrences(event, end_date)
+          # Take first 4 recurrences
+          |> Enum.take(4)
+
+        [event | recurrences]
+      end)
+      |> List.flatten()
+
+    assert events |> Enum.count() == 5
+
+    # All events represent "Friday midnight Auckland" converted to "Thursday 11:00 UTC"
+    # The RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=FR generates recurrences every 2 weeks on Friday (Auckland time)
+    # All times maintain consistent timezone conversion: Fri 00:00 Auckland → Thu 11:00 UTC
+    [event | events] = events
+    # Thu UTC = Fri 00:00 Auckland (original)
+    assert event.dtstart == ~U[2025-11-13 11:00:00Z]
+    [event | events] = events
+    # Thu UTC = Fri 00:00 Auckland (+2 weeks)
+    assert event.dtstart == ~U[2025-11-27 11:00:00Z]
+    [event | events] = events
+    # Thu UTC = Fri 00:00 Auckland (+2 weeks)
+    assert event.dtstart == ~U[2025-12-11 11:00:00Z]
+    [event | events] = events
+    # Thu UTC = Fri 00:00 Auckland (+2 weeks)
+    assert event.dtstart == ~U[2025-12-25 11:00:00Z]
+    [event] = events
+    # Thu UTC = Fri 00:00 Auckland (+2 weeks)
+    assert event.dtstart == ~U[2026-01-08 11:00:00Z]
+  end
 end

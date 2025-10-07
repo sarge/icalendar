@@ -13,6 +13,60 @@ defmodule ICalendar.Recurrence do
   # ignore :byhour, :monthday, :byyearday, :byweekno, :bymonth for now
   @supported_by_x_rrules [:byday]
 
+  # Get the logical datetime for recurrence calculations.
+  #
+  # This function handles the case where X-WR-TIMEZONE was applied during parsing,
+  # converting a date-only value from the intended timezone to UTC, which may have
+  # changed the day of the week. For recurrence calculations, we need to work with
+  # the original intended date.
+  defp get_logical_datetime(event) do
+    case event.x_wr_timezone do
+      nil ->
+        # No X-WR-TIMEZONE, use the datetime as-is
+        event.dtstart
+
+      timezone when is_binary(timezone) ->
+        # Event has X-WR-TIMEZONE, check if this looks like a converted date-only value
+        # Date-only values in X-WR-TIMEZONE get converted to UTC, potentially changing the day
+        if is_likely_converted_date_only_value?(event.dtstart, timezone) do
+          # For date-only values, we want to use the "logical" date for recurrence calculations
+          # This means the date as it appears in the original timezone, but at midnight UTC
+          original_datetime = Timex.to_datetime(event.dtstart, timezone)
+          original_date = Timex.to_date(original_datetime)
+          # Create the logical datetime: the same date at midnight UTC
+          DateTime.from_naive!(Timex.to_naive_datetime(original_date), "Etc/UTC")
+        else
+          # Not a converted date-only value, use as-is
+          event.dtstart
+        end
+    end
+  end
+
+  defp get_logical_datetime(event, :dtend) do
+    case event.x_wr_timezone do
+      nil ->
+        event.dtend
+
+      timezone when is_binary(timezone) ->
+        if is_likely_converted_date_only_value?(event.dtend, timezone) do
+          original_datetime = Timex.to_datetime(event.dtend, timezone)
+          original_date = Timex.to_date(original_datetime)
+          # Create the logical datetime: the same date at midnight UTC
+          DateTime.from_naive!(Timex.to_naive_datetime(original_date), "Etc/UTC")
+        else
+          event.dtend
+        end
+    end
+  end
+
+  # Heuristic to detect if a datetime is likely the result of converting a date-only value
+  # with X-WR-TIMEZONE. This is imperfect but should work for common cases.
+  defp is_likely_converted_date_only_value?(datetime, timezone) do
+    # Convert the UTC datetime to the original timezone and check if it's at midnight
+    timezone_dt = Timex.to_datetime(datetime, timezone)
+    timezone_dt.hour == 0 and timezone_dt.minute == 0 and timezone_dt.second == 0
+  end
+
   @doc """
   Given an event, return a stream of recurrences for that event.
 
@@ -237,13 +291,17 @@ defmodule ICalendar.Recurrence do
   end
 
   defp shift_date(date, shift_opts) do
-    case Timex.shift(date, shift_opts) do
-      %Timex.AmbiguousDateTime{} = new_date ->
-        new_date.after
+    result =
+      case Timex.shift(date, shift_opts) do
+        %Timex.AmbiguousDateTime{} = new_date ->
+          new_date.after
 
-      new_date ->
-        new_date
-    end
+        new_date ->
+          new_date
+      end
+
+    # Truncate microseconds to match expected format
+    DateTime.truncate(result, :second)
   end
 
   defp build_refernce_events_by_x_rules(event, by_x_rrules) do
@@ -262,17 +320,51 @@ defmodule ICalendar.Recurrence do
          %{rrule: %{byday: bydays}} = event,
          :byday
        ) do
+    # Use logical datetime for weekday calculations to handle X-WR-TIMEZONE correctly
+    logical_dtstart = get_logical_datetime(event)
+    logical_dtend = get_logical_datetime(event, :dtend)
+
     bydays
     |> Enum.map(fn byday ->
       if byday in @valid_days do
         day_atom = byday |> String.downcase() |> String.to_atom()
 
-        # determine the difference between the byday and the event's dtstart
-        day_offset_for_reference = Map.get(@day_values, day_atom) - Timex.weekday(event.dtstart)
+        # determine the difference between the byday and the logical dtstart
+        day_offset_for_reference = Map.get(@day_values, day_atom) - Timex.weekday(logical_dtstart)
+
+        # For X-WR-TIMEZONE date-only conversions, we should use the original event's
+        # datetime and shift by days, preserving the timezone conversion pattern
+        {reference_dtstart, reference_dtend} =
+          case event.x_wr_timezone do
+            nil ->
+              # No X-WR-TIMEZONE, shift the logical datetime (which is the same as original)
+              shifted_logical_dtstart =
+                Timex.shift(logical_dtstart, days: day_offset_for_reference)
+
+              shifted_logical_dtend = Timex.shift(logical_dtend, days: day_offset_for_reference)
+              {shifted_logical_dtstart, shifted_logical_dtend}
+
+            timezone when is_binary(timezone) ->
+              # Has X-WR-TIMEZONE, check if this is a date-only conversion case
+              if is_likely_converted_date_only_value?(event.dtstart, timezone) do
+                # For date-only conversions, shift the original converted datetime by days
+                # This preserves the timezone conversion pattern (e.g., Auckland midnight → UTC time)
+                reference_dtstart = Timex.shift(event.dtstart, days: day_offset_for_reference)
+                reference_dtend = Timex.shift(event.dtend, days: day_offset_for_reference)
+                {reference_dtstart, reference_dtend}
+              else
+                # Not a date-only conversion, use logical datetime shift
+                shifted_logical_dtstart =
+                  Timex.shift(logical_dtstart, days: day_offset_for_reference)
+
+                shifted_logical_dtend = Timex.shift(logical_dtend, days: day_offset_for_reference)
+                {shifted_logical_dtstart, shifted_logical_dtend}
+              end
+          end
 
         Map.merge(event, %{
-          dtstart: Timex.shift(event.dtstart, days: day_offset_for_reference),
-          dtend: Timex.shift(event.dtend, days: day_offset_for_reference)
+          dtstart: DateTime.truncate(reference_dtstart, :second),
+          dtend: DateTime.truncate(reference_dtend, :second)
         })
       else
         # Ignore the invalid byday value

@@ -84,7 +84,7 @@ defmodule ICalendar.DeserializeTest do
       assert event.dtstart.time_zone == "America/Chicago"
       assert DateTime.to_string(event.dtstart) == "2222-12-24 08:30:00-06:00 CST America/Chicago"
       assert event.dtend.time_zone == "America/Chicago"
-      assert  DateTime.to_string(event.dtend) == "2222-12-24 08:45:00-06:00 CST America/Chicago"
+      assert DateTime.to_string(event.dtend) == "2222-12-24 08:45:00-06:00 CST America/Chicago"
     end
 
     test "with CR+LF line endings" do
@@ -199,7 +199,7 @@ defmodule ICalendar.DeserializeTest do
       assert event.dtstart.time_zone == "America/Chicago"
       assert DateTime.to_string(event.dtstart) == "2222-12-24 08:30:00-06:00 CST America/Chicago"
       assert event.dtend.time_zone == "America/Chicago"
-      assert  DateTime.to_string(event.dtend) == "2222-12-24 08:45:00-06:00 CST America/Chicago"
+      assert DateTime.to_string(event.dtend) == "2222-12-24 08:45:00-06:00 CST America/Chicago"
     end
 
     test "recurring event with Date (no time) values" do
@@ -302,6 +302,5 @@ defmodule ICalendar.DeserializeTest do
       # EXDATE should also be interpreted in the timezone and converted to UTC
       assert event.exdates == [~U[2025-11-15 11:00:00Z]]
     end
-
   end
 end

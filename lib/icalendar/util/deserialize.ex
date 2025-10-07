@@ -12,6 +12,7 @@ defmodule ICalendar.Util.Deserialize do
 
   def build_event(lines, x_wr_timezone) when is_list(lines) do
     initial_event = %Event{x_wr_timezone: x_wr_timezone}
+
     lines
     |> Enum.filter(&(&1 != ""))
     |> Enum.map(&retrieve_kvs/1)
@@ -254,7 +255,9 @@ defmodule ICalendar.Util.Deserialize do
         # Convert to UTC
         utc_datetime = Timex.to_datetime(midnight_datetime, "UTC")
         {:ok, utc_datetime}
-      error -> error
+
+      error ->
+        error
     end
   end
 
@@ -274,7 +277,9 @@ defmodule ICalendar.Util.Deserialize do
           timezone_datetime = Timex.to_datetime(naive_datetime, x_wr_timezone)
           utc_datetime = Timex.to_datetime(timezone_datetime, "UTC")
           {:ok, utc_datetime}
-        error -> error
+
+        error ->
+          error
       end
     else
       # For all other cases, ignore X-WR-TIMEZONE and use existing logic

@@ -8,12 +8,13 @@ defimpl ICalendar.Deserialize, for: BitString do
   alias ICalendar.Util.Deserialize
 
   def from_ics(ics) do
-    calendar_lines = ics
-    |> String.trim()
-    |> adjust_wrapped_lines()
-    |> String.split("\n")
-    |> Enum.map(&String.trim_trailing/1)
-    |> Enum.map(&String.replace(&1, ~S"\n", "\n"))
+    calendar_lines =
+      ics
+      |> String.trim()
+      |> adjust_wrapped_lines()
+      |> String.split("\n")
+      |> Enum.map(&String.trim_trailing/1)
+      |> Enum.map(&String.replace(&1, ~S"\n", "\n"))
 
     # Extract X-WR-TIMEZONE from calendar level
     x_wr_timezone = extract_x_wr_timezone(calendar_lines)
@@ -34,7 +35,9 @@ defimpl ICalendar.Deserialize, for: BitString do
       String.starts_with?(line, "X-WR-TIMEZONE:")
     end)
     |> case do
-      nil -> nil
+      nil ->
+        nil
+
       line ->
         [_, timezone] = String.split(line, ":", parts: 2)
         timezone
@@ -55,7 +58,12 @@ defimpl ICalendar.Deserialize, for: BitString do
         get_events(calendar_data, [event] ++ event_collector, [], x_wr_timezone)
 
       event_property when temp_collector != [] ->
-        get_events(calendar_data, event_collector, temp_collector ++ [event_property], x_wr_timezone)
+        get_events(
+          calendar_data,
+          event_collector,
+          temp_collector ++ [event_property],
+          x_wr_timezone
+        )
 
       _unimportant_stuff ->
         get_events(calendar_data, event_collector, temp_collector, x_wr_timezone)
