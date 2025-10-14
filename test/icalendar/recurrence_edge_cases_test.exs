@@ -19,8 +19,18 @@ defmodule ICalendar.RecurrenceEdgeCasesTest do
     """
     |> ICalendar.from_ics()
     |> Enum.flat_map(fn event ->
+      # For infinite recurrence (no COUNT or UNTIL), provide an end date
+      # that's far enough in the future to generate the expected test results
+      end_date =
+        if String.contains?(rrule, "COUNT") or String.contains?(rrule, "UNTIL") do
+          DateTime.utc_now()
+        else
+          # For infinite recurrence, set end date 1 year from start
+          DateTime.add(dtstart, 365, :day)
+        end
+
       recurrances =
-        ICalendar.Recurrence.get_recurrences(event)
+        ICalendar.Recurrence.get_recurrences(event, end_date)
         |> Enum.take(5)
         |> Enum.map(fn r -> r.dtstart end)
 
@@ -84,7 +94,8 @@ defmodule ICalendar.RecurrenceEdgeCasesTest do
     test "FREQ=YEARLY starting on Feb 29 (leap year)" do
       results =
         create_ical_event(
-          ~U[2024-02-29 09:00:00Z], # Feb 29 in leap year 2024
+          # Feb 29 in leap year 2024
+          ~U[2024-02-29 09:00:00Z],
           "FREQ=YEARLY;COUNT=4"
         )
 
@@ -117,7 +128,8 @@ defmodule ICalendar.RecurrenceEdgeCasesTest do
     test "FREQ=MONTHLY starting on 31st" do
       results =
         create_ical_event(
-          ~U[2025-01-31 09:00:00Z], # Jan 31
+          # Jan 31
+          ~U[2025-01-31 09:00:00Z],
           "FREQ=MONTHLY;COUNT=4"
         )
 
@@ -130,7 +142,8 @@ defmodule ICalendar.RecurrenceEdgeCasesTest do
     test "FREQ=MONTHLY starting on 30th" do
       results =
         create_ical_event(
-          ~U[2025-01-30 09:00:00Z], # Jan 30
+          # Jan 30
+          ~U[2025-01-30 09:00:00Z],
           "FREQ=MONTHLY;COUNT=4"
         )
 
@@ -149,11 +162,16 @@ defmodule ICalendar.RecurrenceEdgeCasesTest do
 
       # Should only occur in months with 31 days
       assert [
-               ~U[2025-01-31 09:00:00Z], # January
-               ~U[2025-03-31 09:00:00Z], # March (skip February)
-               ~U[2025-05-31 09:00:00Z], # May (skip April)
-               ~U[2025-07-31 09:00:00Z], # July (skip June)
-               ~U[2025-08-31 09:00:00Z]  # August
+               # January
+               ~U[2025-01-31 09:00:00Z],
+               # March (skip February)
+               ~U[2025-03-31 09:00:00Z],
+               # May (skip April)
+               ~U[2025-05-31 09:00:00Z],
+               # July (skip June)
+               ~U[2025-07-31 09:00:00Z],
+               # August
+               ~U[2025-08-31 09:00:00Z]
              ] = results
     end
   end
@@ -162,7 +180,8 @@ defmodule ICalendar.RecurrenceEdgeCasesTest do
     test "FREQ=WEEKLY starting on Sunday" do
       results =
         create_ical_event(
-          ~U[2025-10-12 09:00:00Z], # Sunday
+          # Sunday
+          ~U[2025-10-12 09:00:00Z],
           "FREQ=WEEKLY;COUNT=3"
         )
 
@@ -176,7 +195,8 @@ defmodule ICalendar.RecurrenceEdgeCasesTest do
     test "FREQ=WEEKLY starting on Saturday" do
       results =
         create_ical_event(
-          ~U[2025-10-11 09:00:00Z], # Saturday
+          # Saturday
+          ~U[2025-10-11 09:00:00Z],
           "FREQ=WEEKLY;COUNT=3"
         )
 
@@ -192,13 +212,15 @@ defmodule ICalendar.RecurrenceEdgeCasesTest do
       # Test how week start affects weekly recurrence
       results_sun =
         create_ical_event(
-          ~U[2025-10-12 09:00:00Z], # Sunday
+          # Sunday
+          ~U[2025-10-12 09:00:00Z],
           "FREQ=WEEKLY;WKST=SU;COUNT=3"
         )
 
       results_mon =
         create_ical_event(
-          ~U[2025-10-12 09:00:00Z], # Sunday
+          # Sunday
+          ~U[2025-10-12 09:00:00Z],
           "FREQ=WEEKLY;WKST=MO;COUNT=3"
         )
 
@@ -211,7 +233,8 @@ defmodule ICalendar.RecurrenceEdgeCasesTest do
     test "FREQ=YEARLY crossing year boundary" do
       results =
         create_ical_event(
-          ~U[2025-12-31 23:59:59Z], # Last second of 2025
+          # Last second of 2025
+          ~U[2025-12-31 23:59:59Z],
           "FREQ=YEARLY;COUNT=3"
         )
 
@@ -287,7 +310,8 @@ defmodule ICalendar.RecurrenceEdgeCasesTest do
       # Implementation dependent on timezone support
       results =
         create_ical_event(
-          ~U[2025-03-08 02:00:00Z], # Around DST transition
+          # Around DST transition
+          ~U[2025-03-08 02:00:00Z],
           "FREQ=DAILY;COUNT=3"
         )
 
@@ -300,7 +324,8 @@ defmodule ICalendar.RecurrenceEdgeCasesTest do
       # During spring DST transition, 2 AM becomes 3 AM
       results =
         create_ical_event(
-          ~U[2025-03-09 01:00:00Z], # 1 AM before DST
+          # 1 AM before DST
+          ~U[2025-03-09 01:00:00Z],
           "FREQ=HOURLY;COUNT=4"
         )
 
@@ -313,7 +338,8 @@ defmodule ICalendar.RecurrenceEdgeCasesTest do
       # During fall DST transition, 2 AM occurs twice
       results =
         create_ical_event(
-          ~U[2025-11-02 01:00:00Z], # 1 AM before DST
+          # 1 AM before DST
+          ~U[2025-11-02 01:00:00Z],
           "FREQ=HOURLY;COUNT=4"
         )
 
@@ -333,8 +359,10 @@ defmodule ICalendar.RecurrenceEdgeCasesTest do
       # Should be roughly yearly, but might drift due to leap years
       assert [
                ~U[2025-10-17 09:00:00Z],
-               ~U[2026-10-17 09:00:00Z], # Exactly 365 days later
-               ~U[2027-10-17 09:00:00Z]  # Another 365 days
+               # Exactly 365 days later
+               ~U[2026-10-17 09:00:00Z],
+               # Another 365 days
+               ~U[2027-10-17 09:00:00Z]
              ] = results
     end
 

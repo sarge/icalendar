@@ -19,9 +19,20 @@ defmodule ICalendar.RecurrenceHighFrequencyTest do
     """
     |> ICalendar.from_ics()
     |> Enum.flat_map(fn event ->
+      # For infinite recurrence (no COUNT or UNTIL), provide an end date
+      # that's far enough in the future to generate the expected test results
+      end_date =
+        if String.contains?(rrule, "COUNT") or String.contains?(rrule, "UNTIL") do
+          DateTime.utc_now()
+        else
+          # For infinite recurrence, set end date 1 year from start
+          DateTime.add(dtstart, 365, :day)
+        end
+
       recurrances =
-        ICalendar.Recurrence.get_recurrences(event)
-        |> Enum.take(10)  # Take more for high frequency events
+        ICalendar.Recurrence.get_recurrences(event, end_date)
+        # Take more for high frequency events
+        |> Enum.take(10)
         |> Enum.map(fn r -> r.dtstart end)
 
       [event.dtstart | recurrances]
@@ -279,7 +290,8 @@ defmodule ICalendar.RecurrenceHighFrequencyTest do
     test "FREQ=HOURLY;BYDAY=MO,TU,WE,TH,FR" do
       results =
         create_ical_event(
-          ~U[2025-10-13 09:00:00Z], # Monday
+          # Monday
+          ~U[2025-10-13 09:00:00Z],
           "FREQ=HOURLY;BYDAY=MO,TU,WE,TH,FR"
         )
 

@@ -19,8 +19,18 @@ defmodule ICalendar.RecurrenceYearlyTest do
     """
     |> ICalendar.from_ics()
     |> Enum.flat_map(fn event ->
+      # For infinite recurrence (no COUNT or UNTIL), provide an end date
+      # that's far enough in the future to generate the expected test results
+      end_date =
+        if String.contains?(rrule, "COUNT") or String.contains?(rrule, "UNTIL") do
+          DateTime.utc_now()
+        else
+          # For infinite recurrence, set end date 1 year from start
+          DateTime.add(dtstart, 365, :day)
+        end
+
       recurrances =
-        ICalendar.Recurrence.get_recurrences(event)
+        ICalendar.Recurrence.get_recurrences(event, end_date)
         |> Enum.take(5)
         |> Enum.map(fn r -> r.dtstart end)
 
@@ -199,17 +209,24 @@ defmodule ICalendar.RecurrenceYearlyTest do
     test "FREQ=YEARLY;BYYEARDAY=100" do
       results =
         create_ical_event(
-          ~U[2025-04-10 07:00:00Z], # 100th day of 2025 (April 10)
+          # 100th day of 2025 (April 10)
+          ~U[2025-04-10 07:00:00Z],
           "FREQ=YEARLY;BYYEARDAY=100"
         )
 
       assert [
-               ~U[2025-04-10 07:00:00Z], # 100th day of 2025
-               ~U[2026-04-10 07:00:00Z], # 100th day of 2026
-               ~U[2027-04-10 07:00:00Z], # 100th day of 2027
-               ~U[2028-04-09 07:00:00Z], # 100th day of 2028 (leap year)
-               ~U[2029-04-10 07:00:00Z], # 100th day of 2029
-               ~U[2030-04-10 07:00:00Z]  # 100th day of 2030
+               # 100th day of 2025
+               ~U[2025-04-10 07:00:00Z],
+               # 100th day of 2026
+               ~U[2026-04-10 07:00:00Z],
+               # 100th day of 2027
+               ~U[2027-04-10 07:00:00Z],
+               # 100th day of 2028 (leap year)
+               ~U[2028-04-09 07:00:00Z],
+               # 100th day of 2029
+               ~U[2029-04-10 07:00:00Z],
+               # 100th day of 2030
+               ~U[2030-04-10 07:00:00Z]
              ] = results
     end
 
@@ -217,18 +234,25 @@ defmodule ICalendar.RecurrenceYearlyTest do
     test "FREQ=YEARLY;BYYEARDAY=1,100,200,365" do
       results =
         create_ical_event(
-          ~U[2025-01-01 07:00:00Z], # 1st day of year
+          # 1st day of year
+          ~U[2025-01-01 07:00:00Z],
           "FREQ=YEARLY;BYYEARDAY=1,100,200,365"
         )
 
       # Should occur 4 times per year on days 1, 100, 200, 365
       assert [
-               ~U[2025-01-01 07:00:00Z], # Day 1
-               ~U[2025-04-10 07:00:00Z], # Day 100
-               ~U[2025-07-19 07:00:00Z], # Day 200
-               ~U[2025-12-31 07:00:00Z], # Day 365
-               ~U[2026-01-01 07:00:00Z], # Day 1 next year
-               ~U[2026-04-10 07:00:00Z]  # Day 100 next year
+               # Day 1
+               ~U[2025-01-01 07:00:00Z],
+               # Day 100
+               ~U[2025-04-10 07:00:00Z],
+               # Day 200
+               ~U[2025-07-19 07:00:00Z],
+               # Day 365
+               ~U[2025-12-31 07:00:00Z],
+               # Day 1 next year
+               ~U[2026-01-01 07:00:00Z],
+               # Day 100 next year
+               ~U[2026-04-10 07:00:00Z]
              ] = results
     end
 
@@ -236,7 +260,8 @@ defmodule ICalendar.RecurrenceYearlyTest do
     test "FREQ=YEARLY;BYYEARDAY=-1" do
       results =
         create_ical_event(
-          ~U[2025-12-31 07:00:00Z], # Last day of 2025
+          # Last day of 2025
+          ~U[2025-12-31 07:00:00Z],
           "FREQ=YEARLY;BYYEARDAY=-1"
         )
 
@@ -245,7 +270,8 @@ defmodule ICalendar.RecurrenceYearlyTest do
                ~U[2025-12-31 07:00:00Z],
                ~U[2026-12-31 07:00:00Z],
                ~U[2027-12-31 07:00:00Z],
-               ~U[2028-12-31 07:00:00Z], # 2028 is leap year, still Dec 31
+               # 2028 is leap year, still Dec 31
+               ~U[2028-12-31 07:00:00Z],
                ~U[2029-12-31 07:00:00Z],
                ~U[2030-12-31 07:00:00Z]
              ] = results
@@ -255,18 +281,25 @@ defmodule ICalendar.RecurrenceYearlyTest do
     test "FREQ=YEARLY;BYYEARDAY=-365,-1" do
       results =
         create_ical_event(
-          ~U[2025-01-01 07:00:00Z], # First day of year
+          # First day of year
+          ~U[2025-01-01 07:00:00Z],
           "FREQ=YEARLY;BYYEARDAY=-365,-1"
         )
 
       # Should occur on first day (365 from end) and last day of each year
       assert [
-               ~U[2025-01-01 07:00:00Z], # -365 in non-leap year
-               ~U[2025-12-31 07:00:00Z], # -1
-               ~U[2026-01-01 07:00:00Z], # -365 in non-leap year
-               ~U[2026-12-31 07:00:00Z], # -1
-               ~U[2027-01-01 07:00:00Z], # -365 in non-leap year
-               ~U[2027-12-31 07:00:00Z]  # -1
+               # -365 in non-leap year
+               ~U[2025-01-01 07:00:00Z],
+               # -1
+               ~U[2025-12-31 07:00:00Z],
+               # -365 in non-leap year
+               ~U[2026-01-01 07:00:00Z],
+               # -1
+               ~U[2026-12-31 07:00:00Z],
+               # -365 in non-leap year
+               ~U[2027-01-01 07:00:00Z],
+               # -1
+               ~U[2027-12-31 07:00:00Z]
              ] = results
     end
   end
@@ -276,14 +309,16 @@ defmodule ICalendar.RecurrenceYearlyTest do
     test "FREQ=YEARLY;BYWEEKNO=20" do
       results =
         create_ical_event(
-          ~U[2025-05-12 07:00:00Z], # Week 20 of 2025
+          # Week 20 of 2025
+          ~U[2025-05-12 07:00:00Z],
           "FREQ=YEARLY;BYWEEKNO=20"
         )
 
       # Should occur during week 20 of each year
       assert [
                ~U[2025-05-12 07:00:00Z],
-               ~U[2026-05-11 07:00:00Z], # Week 20 might start on different dates
+               # Week 20 might start on different dates
+               ~U[2026-05-11 07:00:00Z],
                ~U[2027-05-17 07:00:00Z],
                ~U[2028-05-15 07:00:00Z],
                ~U[2029-05-14 07:00:00Z],
@@ -295,13 +330,15 @@ defmodule ICalendar.RecurrenceYearlyTest do
     test "FREQ=YEARLY;BYWEEKNO=1,20,53" do
       results =
         create_ical_event(
-          ~U[2025-01-06 07:00:00Z], # Week 1 of 2025
+          # Week 1 of 2025
+          ~U[2025-01-06 07:00:00Z],
           "FREQ=YEARLY;BYWEEKNO=1,20,53"
         )
 
       # Should occur 3 times per year in weeks 1, 20, and 53 (if it exists)
       # Note: Not all years have week 53
-      assert length(results) >= 6  # At least 2 years worth
+      # At least 2 years worth
+      assert length(results) >= 6
       assert hd(results) == ~U[2025-01-06 07:00:00Z]
     end
 
@@ -309,7 +346,8 @@ defmodule ICalendar.RecurrenceYearlyTest do
     test "FREQ=YEARLY;BYDAY=MO;BYWEEKNO=20" do
       results =
         create_ical_event(
-          ~U[2025-05-12 07:00:00Z], # Monday of week 20, 2025
+          # Monday of week 20, 2025
+          ~U[2025-05-12 07:00:00Z],
           "FREQ=YEARLY;BYDAY=MO;BYWEEKNO=20"
         )
 
@@ -330,7 +368,8 @@ defmodule ICalendar.RecurrenceYearlyTest do
     test "FREQ=YEARLY;BYDAY=20MO" do
       results =
         create_ical_event(
-          ~U[2025-05-12 07:00:00Z], # 20th Monday of 2025
+          # 20th Monday of 2025
+          ~U[2025-05-12 07:00:00Z],
           "FREQ=YEARLY;BYDAY=20MO"
         )
 
@@ -349,7 +388,8 @@ defmodule ICalendar.RecurrenceYearlyTest do
     test "FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10" do
       results =
         create_ical_event(
-          ~U[2025-10-26 07:00:00Z], # Last Sunday of October 2025
+          # Last Sunday of October 2025
+          ~U[2025-10-26 07:00:00Z],
           "FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10"
         )
 
@@ -368,7 +408,8 @@ defmodule ICalendar.RecurrenceYearlyTest do
     test "FREQ=YEARLY;BYDAY=1SU;BYMONTH=4" do
       results =
         create_ical_event(
-          ~U[2025-04-06 07:00:00Z], # First Sunday of April 2025
+          # First Sunday of April 2025
+          ~U[2025-04-06 07:00:00Z],
           "FREQ=YEARLY;BYDAY=1SU;BYMONTH=4"
         )
 
@@ -387,18 +428,25 @@ defmodule ICalendar.RecurrenceYearlyTest do
     test "FREQ=YEARLY;BYDAY=1SU;BYMONTH=4,10" do
       results =
         create_ical_event(
-          ~U[2025-04-06 07:00:00Z], # First Sunday of April 2025
+          # First Sunday of April 2025
+          ~U[2025-04-06 07:00:00Z],
           "FREQ=YEARLY;BYDAY=1SU;BYMONTH=4,10"
         )
 
       # Should occur on first Sunday of April and October each year
       assert [
-               ~U[2025-04-06 07:00:00Z], # First Sunday of April
-               ~U[2025-10-05 07:00:00Z], # First Sunday of October
-               ~U[2026-04-05 07:00:00Z], # First Sunday of April next year
-               ~U[2026-10-04 07:00:00Z], # First Sunday of October next year
-               ~U[2027-04-04 07:00:00Z], # First Sunday of April
-               ~U[2027-10-03 07:00:00Z]  # First Sunday of October
+               # First Sunday of April
+               ~U[2025-04-06 07:00:00Z],
+               # First Sunday of October
+               ~U[2025-10-05 07:00:00Z],
+               # First Sunday of April next year
+               ~U[2026-04-05 07:00:00Z],
+               # First Sunday of October next year
+               ~U[2026-10-04 07:00:00Z],
+               # First Sunday of April
+               ~U[2027-04-04 07:00:00Z],
+               # First Sunday of October
+               ~U[2027-10-03 07:00:00Z]
              ] = results
     end
   end
@@ -417,7 +465,8 @@ defmodule ICalendar.RecurrenceYearlyTest do
     test "FREQ=YEARLY leap year February 29" do
       results =
         create_ical_event(
-          ~U[2024-02-29 07:00:00Z], # Feb 29 in leap year 2024
+          # Feb 29 in leap year 2024
+          ~U[2024-02-29 07:00:00Z],
           "FREQ=YEARLY;COUNT=3"
         )
 

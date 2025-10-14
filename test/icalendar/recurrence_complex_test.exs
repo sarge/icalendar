@@ -19,9 +19,20 @@ defmodule ICalendar.RecurrenceComplexTest do
     """
     |> ICalendar.from_ics()
     |> Enum.flat_map(fn event ->
+      # For infinite recurrence (no COUNT or UNTIL), provide an end date
+      # that's far enough in the future to generate the expected test results
+      end_date =
+        if String.contains?(rrule, "COUNT") or String.contains?(rrule, "UNTIL") do
+          DateTime.utc_now()
+        else
+          # For infinite recurrence, set end date 1 year from start
+          DateTime.add(dtstart, 365, :day)
+        end
+
       recurrances =
-        ICalendar.Recurrence.get_recurrences(event)
-        |> Enum.take(8)  # Take more for complex rules
+        ICalendar.Recurrence.get_recurrences(event, end_date)
+        # Take more for complex rules
+        |> Enum.take(8)
         |> Enum.map(fn r -> r.dtstart end)
 
       [event.dtstart | recurrances]
@@ -33,18 +44,25 @@ defmodule ICalendar.RecurrenceComplexTest do
     test "FREQ=MONTHLY;BYDAY=MO;BYMONTHDAY=1,2,3,4,5,6,7" do
       results =
         create_ical_event(
-          ~U[2025-10-06 09:00:00Z], # First Monday in range
+          # First Monday in range
+          ~U[2025-10-06 09:00:00Z],
           "FREQ=MONTHLY;BYDAY=MO;BYMONTHDAY=1,2,3,4,5,6,7"
         )
 
       # Should occur on Monday if it falls on days 1-7 of the month (first week)
       assert [
-               ~U[2025-10-06 09:00:00Z], # Oct 6 is Monday in first week
-               ~U[2025-11-03 09:00:00Z], # Nov 3 is Monday in first week
-               ~U[2025-12-01 09:00:00Z], # Dec 1 is Monday in first week
-               ~U[2026-01-05 09:00:00Z], # Jan 5 is Monday in first week
-               ~U[2026-02-02 09:00:00Z], # Feb 2 is Monday in first week
-               ~U[2026-03-02 09:00:00Z]  # Mar 2 is Monday in first week
+               # Oct 6 is Monday in first week
+               ~U[2025-10-06 09:00:00Z],
+               # Nov 3 is Monday in first week
+               ~U[2025-11-03 09:00:00Z],
+               # Dec 1 is Monday in first week
+               ~U[2025-12-01 09:00:00Z],
+               # Jan 5 is Monday in first week
+               ~U[2026-01-05 09:00:00Z],
+               # Feb 2 is Monday in first week
+               ~U[2026-02-02 09:00:00Z],
+               # Mar 2 is Monday in first week
+               ~U[2026-03-02 09:00:00Z]
              ] = Enum.take(results, 6)
     end
 
@@ -52,7 +70,8 @@ defmodule ICalendar.RecurrenceComplexTest do
     test "FREQ=YEARLY;BYMONTH=1;BYDAY=SU;BYMONTHDAY=1,2,3,4,5,6,7" do
       results =
         create_ical_event(
-          ~U[2025-01-05 09:00:00Z], # First Sunday of January 2025
+          # First Sunday of January 2025
+          ~U[2025-01-05 09:00:00Z],
           "FREQ=YEARLY;BYMONTH=1;BYDAY=SU;BYMONTHDAY=1,2,3,4,5,6,7"
         )
 
@@ -62,7 +81,8 @@ defmodule ICalendar.RecurrenceComplexTest do
                ~U[2026-01-04 09:00:00Z],
                ~U[2027-01-03 09:00:00Z],
                ~U[2028-01-02 09:00:00Z],
-               ~U[2029-01-07 09:00:00Z], # Jan 1 is Mon, so first Sun is 7th
+               # Jan 1 is Mon, so first Sun is 7th
+               ~U[2029-01-07 09:00:00Z],
                ~U[2030-01-06 09:00:00Z]
              ] = Enum.take(results, 6)
     end
@@ -71,7 +91,8 @@ defmodule ICalendar.RecurrenceComplexTest do
     test "FREQ=YEARLY;BYWEEKNO=1;BYDAY=MO" do
       results =
         create_ical_event(
-          ~U[2025-01-06 09:00:00Z], # Monday of week 1, 2025
+          # Monday of week 1, 2025
+          ~U[2025-01-06 09:00:00Z],
           "FREQ=YEARLY;BYWEEKNO=1;BYDAY=MO"
         )
 
@@ -90,7 +111,8 @@ defmodule ICalendar.RecurrenceComplexTest do
     test "FREQ=MONTHLY;BYDAY=FR;BYMONTHDAY=13" do
       results =
         create_ical_event(
-          ~U[2025-06-13 09:00:00Z], # Friday the 13th in June 2025
+          # Friday the 13th in June 2025
+          ~U[2025-06-13 09:00:00Z],
           "FREQ=MONTHLY;BYDAY=FR;BYMONTHDAY=13"
         )
 
@@ -104,18 +126,25 @@ defmodule ICalendar.RecurrenceComplexTest do
     test "FREQ=DAILY;BYMONTH=6,7,8;BYDAY=MO,TU,WE,TH,FR" do
       results =
         create_ical_event(
-          ~U[2025-06-02 09:00:00Z], # Monday in June
+          # Monday in June
+          ~U[2025-06-02 09:00:00Z],
           "FREQ=DAILY;BYMONTH=6,7,8;BYDAY=MO,TU,WE,TH,FR"
         )
 
       # Should occur on weekdays during summer months (June, July, August)
       assert [
-               ~U[2025-06-02 09:00:00Z], # Monday
-               ~U[2025-06-03 09:00:00Z], # Tuesday
-               ~U[2025-06-04 09:00:00Z], # Wednesday
-               ~U[2025-06-05 09:00:00Z], # Thursday
-               ~U[2025-06-06 09:00:00Z], # Friday
-               ~U[2025-06-09 09:00:00Z]  # Next Monday (skip weekend)
+               # Monday
+               ~U[2025-06-02 09:00:00Z],
+               # Tuesday
+               ~U[2025-06-03 09:00:00Z],
+               # Wednesday
+               ~U[2025-06-04 09:00:00Z],
+               # Thursday
+               ~U[2025-06-05 09:00:00Z],
+               # Friday
+               ~U[2025-06-06 09:00:00Z],
+               # Next Monday (skip weekend)
+               ~U[2025-06-09 09:00:00Z]
              ] = Enum.take(results, 6)
     end
   end
@@ -125,17 +154,22 @@ defmodule ICalendar.RecurrenceComplexTest do
     test "FREQ=YEARLY;BYDAY=MO;BYSETPOS=1,50" do
       results =
         create_ical_event(
-          ~U[2025-01-06 09:00:00Z], # First Monday of 2025
+          # First Monday of 2025
+          ~U[2025-01-06 09:00:00Z],
           "FREQ=YEARLY;BYDAY=MO;BYSETPOS=1,50"
         )
 
       # Should occur on 1st and 50th Monday of each year
       # Most years have 52-53 Mondays, so 50th should exist
       assert [
-               ~U[2025-01-06 09:00:00Z], # 1st Monday
-               ~U[2025-12-15 09:00:00Z], # 50th Monday (approximate)
-               ~U[2026-01-05 09:00:00Z], # 1st Monday next year
-               ~U[2026-12-14 09:00:00Z]  # 50th Monday next year
+               # 1st Monday
+               ~U[2025-01-06 09:00:00Z],
+               # 50th Monday (approximate)
+               ~U[2025-12-15 09:00:00Z],
+               # 1st Monday next year
+               ~U[2026-01-05 09:00:00Z],
+               # 50th Monday next year
+               ~U[2026-12-14 09:00:00Z]
              ] = Enum.take(results, 4)
     end
 
@@ -143,18 +177,25 @@ defmodule ICalendar.RecurrenceComplexTest do
     test "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=1,-1" do
       results =
         create_ical_event(
-          ~U[2025-10-13 09:00:00Z], # First weekday of week
+          # First weekday of week
+          ~U[2025-10-13 09:00:00Z],
           "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=1,-1"
         )
 
       # Should occur on first and last weekday of each week
       assert [
-               ~U[2025-10-13 09:00:00Z], # Monday (first weekday)
-               ~U[2025-10-17 09:00:00Z], # Friday (last weekday)
-               ~U[2025-10-20 09:00:00Z], # Next Monday
-               ~U[2025-10-24 09:00:00Z], # Next Friday
-               ~U[2025-10-27 09:00:00Z], # Following Monday
-               ~U[2025-10-31 09:00:00Z]  # Following Friday
+               # Monday (first weekday)
+               ~U[2025-10-13 09:00:00Z],
+               # Friday (last weekday)
+               ~U[2025-10-17 09:00:00Z],
+               # Next Monday
+               ~U[2025-10-20 09:00:00Z],
+               # Next Friday
+               ~U[2025-10-24 09:00:00Z],
+               # Following Monday
+               ~U[2025-10-27 09:00:00Z],
+               # Following Friday
+               ~U[2025-10-31 09:00:00Z]
              ] = Enum.take(results, 6)
     end
 
@@ -162,18 +203,25 @@ defmodule ICalendar.RecurrenceComplexTest do
     test "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=1,2,3" do
       results =
         create_ical_event(
-          ~U[2025-10-01 09:00:00Z], # First weekday of October
+          # First weekday of October
+          ~U[2025-10-01 09:00:00Z],
           "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=1,2,3"
         )
 
       # Should occur on 1st, 2nd, and 3rd weekday of each month
       assert [
-               ~U[2025-10-01 09:00:00Z], # 1st weekday (Wed)
-               ~U[2025-10-02 09:00:00Z], # 2nd weekday (Thu)
-               ~U[2025-10-03 09:00:00Z], # 3rd weekday (Fri)
-               ~U[2025-11-03 09:00:00Z], # 1st weekday of Nov (Mon)
-               ~U[2025-11-04 09:00:00Z], # 2nd weekday of Nov (Tue)
-               ~U[2025-11-05 09:00:00Z]  # 3rd weekday of Nov (Wed)
+               # 1st weekday (Wed)
+               ~U[2025-10-01 09:00:00Z],
+               # 2nd weekday (Thu)
+               ~U[2025-10-02 09:00:00Z],
+               # 3rd weekday (Fri)
+               ~U[2025-10-03 09:00:00Z],
+               # 1st weekday of Nov (Mon)
+               ~U[2025-11-03 09:00:00Z],
+               # 2nd weekday of Nov (Tue)
+               ~U[2025-11-04 09:00:00Z],
+               # 3rd weekday of Nov (Wed)
+               ~U[2025-11-05 09:00:00Z]
              ] = Enum.take(results, 6)
     end
 
@@ -181,18 +229,25 @@ defmodule ICalendar.RecurrenceComplexTest do
     test "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-3,-2,-1" do
       results =
         create_ical_event(
-          ~U[2025-10-29 09:00:00Z], # 3rd from last weekday
+          # 3rd from last weekday
+          ~U[2025-10-29 09:00:00Z],
           "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-3,-2,-1"
         )
 
       # Should occur on last 3 weekdays of each month
       assert [
-               ~U[2025-10-29 09:00:00Z], # 3rd from last (Tue)
-               ~U[2025-10-30 09:00:00Z], # 2nd from last (Wed)
-               ~U[2025-10-31 09:00:00Z], # Last (Thu)
-               ~U[2025-11-26 09:00:00Z], # 3rd from last of Nov
-               ~U[2025-11-27 09:00:00Z], # 2nd from last of Nov
-               ~U[2025-11-28 09:00:00Z]  # Last of Nov
+               # 3rd from last (Tue)
+               ~U[2025-10-29 09:00:00Z],
+               # 2nd from last (Wed)
+               ~U[2025-10-30 09:00:00Z],
+               # Last (Thu)
+               ~U[2025-10-31 09:00:00Z],
+               # 3rd from last of Nov
+               ~U[2025-11-26 09:00:00Z],
+               # 2nd from last of Nov
+               ~U[2025-11-27 09:00:00Z],
+               # Last of Nov
+               ~U[2025-11-28 09:00:00Z]
              ] = Enum.take(results, 6)
     end
   end
@@ -221,18 +276,25 @@ defmodule ICalendar.RecurrenceComplexTest do
     test "FREQ=WEEKLY;BYDAY=MO,WE,FR;BYHOUR=9,17" do
       results =
         create_ical_event(
-          ~U[2025-10-13 09:00:00Z], # Monday
+          # Monday
+          ~U[2025-10-13 09:00:00Z],
           "FREQ=WEEKLY;BYDAY=MO,WE,FR;BYHOUR=9,17"
         )
 
       # Should occur twice on Mon/Wed/Fri: at 9 AM and 5 PM
       assert [
-               ~U[2025-10-13 09:00:00Z], # Mon 9 AM
-               ~U[2025-10-13 17:00:00Z], # Mon 5 PM
-               ~U[2025-10-15 09:00:00Z], # Wed 9 AM
-               ~U[2025-10-15 17:00:00Z], # Wed 5 PM
-               ~U[2025-10-17 09:00:00Z], # Fri 9 AM
-               ~U[2025-10-17 17:00:00Z]  # Fri 5 PM
+               # Mon 9 AM
+               ~U[2025-10-13 09:00:00Z],
+               # Mon 5 PM
+               ~U[2025-10-13 17:00:00Z],
+               # Wed 9 AM
+               ~U[2025-10-15 09:00:00Z],
+               # Wed 5 PM
+               ~U[2025-10-15 17:00:00Z],
+               # Fri 9 AM
+               ~U[2025-10-17 09:00:00Z],
+               # Fri 5 PM
+               ~U[2025-10-17 17:00:00Z]
              ] = Enum.take(results, 6)
     end
 
@@ -276,7 +338,8 @@ defmodule ICalendar.RecurrenceComplexTest do
       # Day 366 only exists in leap years
       results =
         create_ical_event(
-          ~U[2024-12-31 09:00:00Z], # Dec 31 in leap year (day 366)
+          # Dec 31 in leap year (day 366)
+          ~U[2024-12-31 09:00:00Z],
           "FREQ=YEARLY;BYYEARDAY=366"
         )
 
@@ -290,7 +353,8 @@ defmodule ICalendar.RecurrenceComplexTest do
       # Monday that falls on 1st of month - rare combination
       results =
         create_ical_event(
-          ~U[2025-12-01 09:00:00Z], # Dec 1, 2025 is Monday
+          # Dec 1, 2025 is Monday
+          ~U[2025-12-01 09:00:00Z],
           "FREQ=WEEKLY;BYDAY=MO;BYMONTHDAY=1"
         )
 

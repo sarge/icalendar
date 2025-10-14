@@ -82,8 +82,6 @@ defmodule ICalendar.RecurrenceExtendedTest do
     end
   end
 
-
-
   describe "FREQ=MONTHLY" do
     test "FREQ=MONTHLY" do
       results =

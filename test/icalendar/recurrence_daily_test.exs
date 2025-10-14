@@ -19,8 +19,18 @@ defmodule ICalendar.RecurrenceDailyTest do
     """
     |> ICalendar.from_ics()
     |> Enum.flat_map(fn event ->
+      # For infinite recurrence (no COUNT or UNTIL), provide an end date
+      # that's far enough in the future to generate the expected test results
+      end_date =
+        if String.contains?(rrule, "COUNT") or String.contains?(rrule, "UNTIL") do
+          DateTime.utc_now()
+        else
+          # For infinite recurrence, set end date 1 year from start
+          DateTime.add(dtstart, 365, :day)
+        end
+
       recurrances =
-        ICalendar.Recurrence.get_recurrences(event)
+        ICalendar.Recurrence.get_recurrences(event, end_date)
         |> Enum.take(5)
         |> Enum.map(fn r -> r.dtstart end)
 
@@ -29,7 +39,6 @@ defmodule ICalendar.RecurrenceDailyTest do
   end
 
   describe "FREQ=DAILY - Basic" do
-    @tag :skip
     test "FREQ=DAILY" do
       results =
         create_ical_event(
@@ -63,7 +72,6 @@ defmodule ICalendar.RecurrenceDailyTest do
              ] = results
     end
 
-    @tag :skip
     test "FREQ=DAILY;UNTIL=20251231T000000Z" do
       results =
         create_ical_event(
@@ -83,7 +91,6 @@ defmodule ICalendar.RecurrenceDailyTest do
   end
 
   describe "FREQ=DAILY - With Interval" do
-    @tag :skip
     test "FREQ=DAILY;INTERVAL=2" do
       results =
         create_ical_event(

@@ -19,8 +19,18 @@ defmodule ICalendar.RecurrenceMonthlyTest do
     """
     |> ICalendar.from_ics()
     |> Enum.flat_map(fn event ->
+      # For infinite recurrence (no COUNT or UNTIL), provide an end date
+      # that's far enough in the future to generate the expected test results
+      end_date =
+        if String.contains?(rrule, "COUNT") or String.contains?(rrule, "UNTIL") do
+          DateTime.utc_now()
+        else
+          # For infinite recurrence, set end date 1 year from start
+          DateTime.add(dtstart, 365, :day)
+        end
+
       recurrances =
-        ICalendar.Recurrence.get_recurrences(event)
+        ICalendar.Recurrence.get_recurrences(event, end_date)
         |> Enum.take(5)
         |> Enum.map(fn r -> r.dtstart end)
 
@@ -120,7 +130,8 @@ defmodule ICalendar.RecurrenceMonthlyTest do
     test "FREQ=MONTHLY;BYDAY=2WE;COUNT=5" do
       results =
         create_ical_event(
-          ~U[2025-10-08 07:00:00Z], # 2nd Wednesday of October 2025
+          # 2nd Wednesday of October 2025
+          ~U[2025-10-08 07:00:00Z],
           "FREQ=MONTHLY;BYDAY=2WE;COUNT=5"
         )
 
@@ -136,7 +147,8 @@ defmodule ICalendar.RecurrenceMonthlyTest do
     test "FREQ=MONTHLY;BYDAY=1MO;COUNT=5" do
       results =
         create_ical_event(
-          ~U[2025-10-06 07:00:00Z], # 1st Monday of October 2025
+          # 1st Monday of October 2025
+          ~U[2025-10-06 07:00:00Z],
           "FREQ=MONTHLY;BYDAY=1MO;COUNT=5"
         )
 
@@ -153,7 +165,8 @@ defmodule ICalendar.RecurrenceMonthlyTest do
     test "FREQ=MONTHLY;BYDAY=-1FR;COUNT=5" do
       results =
         create_ical_event(
-          ~U[2025-10-25 07:00:00Z], # Last Friday of October 2025
+          # Last Friday of October 2025
+          ~U[2025-10-25 07:00:00Z],
           "FREQ=MONTHLY;BYDAY=-1FR;COUNT=5"
         )
 
@@ -208,7 +221,8 @@ defmodule ICalendar.RecurrenceMonthlyTest do
     test "FREQ=MONTHLY;BYMONTHDAY=-1" do
       results =
         create_ical_event(
-          ~U[2025-10-31 07:00:00Z], # Last day of October
+          # Last day of October
+          ~U[2025-10-31 07:00:00Z],
           "FREQ=MONTHLY;BYMONTHDAY=-1"
         )
 
@@ -217,7 +231,8 @@ defmodule ICalendar.RecurrenceMonthlyTest do
                ~U[2025-11-30 07:00:00Z],
                ~U[2025-12-31 07:00:00Z],
                ~U[2026-01-31 07:00:00Z],
-               ~U[2026-02-28 07:00:00Z], # February has 28 days in 2026
+               # February has 28 days in 2026
+               ~U[2026-02-28 07:00:00Z],
                ~U[2026-03-31 07:00:00Z]
              ] = results
     end
@@ -226,18 +241,25 @@ defmodule ICalendar.RecurrenceMonthlyTest do
     test "FREQ=MONTHLY;BYMONTHDAY=-3,-1" do
       results =
         create_ical_event(
-          ~U[2025-10-29 07:00:00Z], # 3rd from last day of October
+          # 3rd from last day of October
+          ~U[2025-10-29 07:00:00Z],
           "FREQ=MONTHLY;BYMONTHDAY=-3,-1"
         )
 
       # Should occur on 3rd from last and last day of each month
       assert [
-               ~U[2025-10-29 07:00:00Z], # Oct 29 (3rd from last)
-               ~U[2025-10-31 07:00:00Z], # Oct 31 (last)
-               ~U[2025-11-28 07:00:00Z], # Nov 28 (3rd from last)
-               ~U[2025-11-30 07:00:00Z], # Nov 30 (last)
-               ~U[2025-12-29 07:00:00Z], # Dec 29 (3rd from last)
-               ~U[2025-12-31 07:00:00Z]  # Dec 31 (last)
+               # Oct 29 (3rd from last)
+               ~U[2025-10-29 07:00:00Z],
+               # Oct 31 (last)
+               ~U[2025-10-31 07:00:00Z],
+               # Nov 28 (3rd from last)
+               ~U[2025-11-28 07:00:00Z],
+               # Nov 30 (last)
+               ~U[2025-11-30 07:00:00Z],
+               # Dec 29 (3rd from last)
+               ~U[2025-12-29 07:00:00Z],
+               # Dec 31 (last)
+               ~U[2025-12-31 07:00:00Z]
              ] = results
     end
   end
@@ -247,18 +269,25 @@ defmodule ICalendar.RecurrenceMonthlyTest do
     test "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=1" do
       results =
         create_ical_event(
-          ~U[2025-10-01 07:00:00Z], # First weekday of October
+          # First weekday of October
+          ~U[2025-10-01 07:00:00Z],
           "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=1"
         )
 
       # Should be first weekday of each month
       assert [
-               ~U[2025-10-01 07:00:00Z], # Oct 1 (Wed)
-               ~U[2025-11-03 07:00:00Z], # Nov 3 (Mon) - Nov 1 is Fri, Nov 2 is Sat, Nov 3 is Mon
-               ~U[2025-12-01 07:00:00Z], # Dec 1 (Mon)
-               ~U[2026-01-01 07:00:00Z], # Jan 1 (Thu)
-               ~U[2026-02-02 07:00:00Z], # Feb 2 (Mon) - Feb 1 is Sun
-               ~U[2026-03-02 07:00:00Z]  # Mar 2 (Mon) - Mar 1 is Sun
+               # Oct 1 (Wed)
+               ~U[2025-10-01 07:00:00Z],
+               # Nov 3 (Mon) - Nov 1 is Fri, Nov 2 is Sat, Nov 3 is Mon
+               ~U[2025-11-03 07:00:00Z],
+               # Dec 1 (Mon)
+               ~U[2025-12-01 07:00:00Z],
+               # Jan 1 (Thu)
+               ~U[2026-01-01 07:00:00Z],
+               # Feb 2 (Mon) - Feb 1 is Sun
+               ~U[2026-02-02 07:00:00Z],
+               # Mar 2 (Mon) - Mar 1 is Sun
+               ~U[2026-03-02 07:00:00Z]
              ] = results
     end
 
@@ -266,18 +295,25 @@ defmodule ICalendar.RecurrenceMonthlyTest do
     test "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1" do
       results =
         create_ical_event(
-          ~U[2025-10-31 07:00:00Z], # Last weekday of October (Thu)
+          # Last weekday of October (Thu)
+          ~U[2025-10-31 07:00:00Z],
           "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1"
         )
 
       # Should be last weekday of each month
       assert [
-               ~U[2025-10-31 07:00:00Z], # Oct 31 (Thu)
-               ~U[2025-11-29 07:00:00Z], # Nov 29 (Fri)
-               ~U[2025-12-31 07:00:00Z], # Dec 31 (Tue)
-               ~U[2026-01-30 07:00:00Z], # Jan 30 (Fri)
-               ~U[2026-02-27 07:00:00Z], # Feb 27 (Fri)
-               ~U[2026-03-31 07:00:00Z]  # Mar 31 (Tue)
+               # Oct 31 (Thu)
+               ~U[2025-10-31 07:00:00Z],
+               # Nov 29 (Fri)
+               ~U[2025-11-29 07:00:00Z],
+               # Dec 31 (Tue)
+               ~U[2025-12-31 07:00:00Z],
+               # Jan 30 (Fri)
+               ~U[2026-01-30 07:00:00Z],
+               # Feb 27 (Fri)
+               ~U[2026-02-27 07:00:00Z],
+               # Mar 31 (Tue)
+               ~U[2026-03-31 07:00:00Z]
              ] = results
     end
 
@@ -285,18 +321,25 @@ defmodule ICalendar.RecurrenceMonthlyTest do
     test "FREQ=MONTHLY;BYDAY=SA,SU;BYSETPOS=1" do
       results =
         create_ical_event(
-          ~U[2025-10-04 07:00:00Z], # First weekend day of October (Sat)
+          # First weekend day of October (Sat)
+          ~U[2025-10-04 07:00:00Z],
           "FREQ=MONTHLY;BYDAY=SA,SU;BYSETPOS=1"
         )
 
       # Should be first weekend day of each month
       assert [
-               ~U[2025-10-04 07:00:00Z], # Oct 4 (Sat)
-               ~U[2025-11-01 07:00:00Z], # Nov 1 (Sat)
-               ~U[2025-12-01 07:00:00Z], # Dec 1 (Sun)
-               ~U[2026-01-03 07:00:00Z], # Jan 3 (Sat) - Jan 1&2 are weekdays
-               ~U[2026-02-01 07:00:00Z], # Feb 1 (Sun)
-               ~U[2026-03-01 07:00:00Z]  # Mar 1 (Sun)
+               # Oct 4 (Sat)
+               ~U[2025-10-04 07:00:00Z],
+               # Nov 1 (Sat)
+               ~U[2025-11-01 07:00:00Z],
+               # Dec 1 (Sun)
+               ~U[2025-12-01 07:00:00Z],
+               # Jan 3 (Sat) - Jan 1&2 are weekdays
+               ~U[2026-01-03 07:00:00Z],
+               # Feb 1 (Sun)
+               ~U[2026-02-01 07:00:00Z],
+               # Mar 1 (Sun)
+               ~U[2026-03-01 07:00:00Z]
              ] = results
     end
 
@@ -304,18 +347,25 @@ defmodule ICalendar.RecurrenceMonthlyTest do
     test "FREQ=MONTHLY;BYDAY=SA,SU;BYSETPOS=-1" do
       results =
         create_ical_event(
-          ~U[2025-10-26 07:00:00Z], # Last weekend day of October (Sun)
+          # Last weekend day of October (Sun)
+          ~U[2025-10-26 07:00:00Z],
           "FREQ=MONTHLY;BYDAY=SA,SU;BYSETPOS=-1"
         )
 
       # Should be last weekend day of each month
       assert [
-               ~U[2025-10-26 07:00:00Z], # Oct 26 (Sun)
-               ~U[2025-11-30 07:00:00Z], # Nov 30 (Sun)
-               ~U[2025-12-29 07:00:00Z], # Dec 29 (Sun)
-               ~U[2026-01-31 07:00:00Z], # Jan 31 (Sat)
-               ~U[2026-02-28 07:00:00Z], # Feb 28 (Sat)
-               ~U[2026-03-29 07:00:00Z]  # Mar 29 (Sun)
+               # Oct 26 (Sun)
+               ~U[2025-10-26 07:00:00Z],
+               # Nov 30 (Sun)
+               ~U[2025-11-30 07:00:00Z],
+               # Dec 29 (Sun)
+               ~U[2025-12-29 07:00:00Z],
+               # Jan 31 (Sat)
+               ~U[2026-01-31 07:00:00Z],
+               # Feb 28 (Sat)
+               ~U[2026-02-28 07:00:00Z],
+               # Mar 29 (Sun)
+               ~U[2026-03-29 07:00:00Z]
              ] = results
     end
   end
@@ -325,18 +375,25 @@ defmodule ICalendar.RecurrenceMonthlyTest do
     test "FREQ=MONTHLY;BYDAY=1MO,3WE" do
       results =
         create_ical_event(
-          ~U[2025-10-06 07:00:00Z], # 1st Monday of October
+          # 1st Monday of October
+          ~U[2025-10-06 07:00:00Z],
           "FREQ=MONTHLY;BYDAY=1MO,3WE"
         )
 
       # Should occur on 1st Monday and 3rd Wednesday of each month
       assert [
-               ~U[2025-10-06 07:00:00Z], # Oct 6 (1st Mon)
-               ~U[2025-10-15 07:00:00Z], # Oct 15 (3rd Wed)
-               ~U[2025-11-03 07:00:00Z], # Nov 3 (1st Mon)
-               ~U[2025-11-19 07:00:00Z], # Nov 19 (3rd Wed)
-               ~U[2025-12-01 07:00:00Z], # Dec 1 (1st Mon)
-               ~U[2025-12-17 07:00:00Z]  # Dec 17 (3rd Wed)
+               # Oct 6 (1st Mon)
+               ~U[2025-10-06 07:00:00Z],
+               # Oct 15 (3rd Wed)
+               ~U[2025-10-15 07:00:00Z],
+               # Nov 3 (1st Mon)
+               ~U[2025-11-03 07:00:00Z],
+               # Nov 19 (3rd Wed)
+               ~U[2025-11-19 07:00:00Z],
+               # Dec 1 (1st Mon)
+               ~U[2025-12-01 07:00:00Z],
+               # Dec 17 (3rd Wed)
+               ~U[2025-12-17 07:00:00Z]
              ] = results
     end
   end
@@ -355,7 +412,8 @@ defmodule ICalendar.RecurrenceMonthlyTest do
     test "FREQ=MONTHLY on 31st (month boundary handling)" do
       results =
         create_ical_event(
-          ~U[2025-10-31 07:00:00Z], # Oct 31
+          # Oct 31
+          ~U[2025-10-31 07:00:00Z],
           "FREQ=MONTHLY;COUNT=3"
         )
 
@@ -369,7 +427,8 @@ defmodule ICalendar.RecurrenceMonthlyTest do
     test "FREQ=MONTHLY leap year February 29" do
       results =
         create_ical_event(
-          ~U[2024-02-29 07:00:00Z], # Feb 29 in leap year 2024
+          # Feb 29 in leap year 2024
+          ~U[2024-02-29 07:00:00Z],
           "FREQ=MONTHLY;COUNT=3"
         )
 
