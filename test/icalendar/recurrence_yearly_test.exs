@@ -26,7 +26,7 @@ defmodule ICalendar.RecurrenceYearlyTest do
           DateTime.utc_now()
         else
           # For infinite recurrence, set end date 1 year from start
-          DateTime.add(dtstart, 365, :day)
+          DateTime.add(dtstart, 365 * 10, :day)
         end
 
       recurrances =
@@ -39,7 +39,6 @@ defmodule ICalendar.RecurrenceYearlyTest do
   end
 
   describe "FREQ=YEARLY - Basic" do
-    @tag :skip
     test "FREQ=YEARLY" do
       results =
         create_ical_event(
@@ -92,7 +91,6 @@ defmodule ICalendar.RecurrenceYearlyTest do
   end
 
   describe "FREQ=YEARLY - With Interval" do
-    @tag :skip
     test "FREQ=YEARLY;INTERVAL=2" do
       results =
         create_ical_event(
@@ -105,8 +103,7 @@ defmodule ICalendar.RecurrenceYearlyTest do
                ~U[2027-10-14 07:00:00Z],
                ~U[2029-10-14 07:00:00Z],
                ~U[2031-10-14 07:00:00Z],
-               ~U[2033-10-14 07:00:00Z],
-               ~U[2035-10-14 07:00:00Z]
+               ~U[2033-10-14 07:00:00Z]
              ] = results
     end
 

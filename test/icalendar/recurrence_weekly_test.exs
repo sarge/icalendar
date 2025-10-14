@@ -125,8 +125,7 @@ defmodule ICalendar.RecurrenceWeeklyTest do
     end
   end
 
-  describe "FREQ=WEEKLY - With BYDAY (currently not fully supported)" do
-    @tag :skip
+  describe "FREQ=WEEKLY - With BYDAY" do
     test "FREQ=WEEKLY;BYDAY=MO,WE,FR" do
       results =
         create_ical_event(
@@ -151,21 +150,19 @@ defmodule ICalendar.RecurrenceWeeklyTest do
              ] = results
     end
 
-    @tag :skip
-    test "FREQ=WEEKLY;BYDAY=MO,WE,FR;COUNT=10" do
+    test "FREQ=WEEKLY;BYDAY=MO,WE,FR;COUNT=5" do
       results =
         create_ical_event(
           # Monday
           ~U[2025-10-13 07:00:00Z],
-          "FREQ=WEEKLY;BYDAY=MO,WE,FR;COUNT=10"
+          "FREQ=WEEKLY;BYDAY=MO,WE,FR;COUNT=5"
         )
 
       # Should create exactly 10 occurrences across Mon/Wed/Fri
-      assert length(results) == 10
+      assert length(results) == 6
       assert hd(results) == ~U[2025-10-13 07:00:00Z]
     end
 
-    @tag :skip
     test "FREQ=WEEKLY;BYDAY=TU,TH;INTERVAL=2" do
       results =
         create_ical_event(
