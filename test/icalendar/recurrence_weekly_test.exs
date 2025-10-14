@@ -107,7 +107,6 @@ defmodule ICalendar.RecurrenceWeeklyTest do
              ] = results
     end
 
-    @tag :skip
     test "FREQ=WEEKLY;INTERVAL=2;COUNT=8" do
       results =
         create_ical_event(

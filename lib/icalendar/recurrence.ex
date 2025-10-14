@@ -166,6 +166,9 @@ defmodule ICalendar.Recurrence do
       %{freq: "WEEKLY", until: until, interval: interval} ->
         add_recurring_events_until(event, reference_events, until, days: interval * 7)
 
+      %{freq: "WEEKLY", count: count, interval: interval} ->
+        add_recurring_events_count(event, reference_events, count, days: interval * 7)
+
       %{freq: "WEEKLY", count: count} ->
         add_recurring_events_count(event, reference_events, count, days: 7)
 
