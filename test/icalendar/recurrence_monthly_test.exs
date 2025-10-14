@@ -170,7 +170,7 @@ defmodule ICalendar.RecurrenceMonthlyTest do
 
       assert [
                ~U[2025-10-25 07:00:00Z],
-               ~U[2025-11-29 07:00:00Z],
+               ~U[2025-11-28 07:00:00Z],
                ~U[2025-12-26 07:00:00Z],
                ~U[2026-01-30 07:00:00Z],
                ~U[2026-02-27 07:00:00Z]
@@ -262,8 +262,7 @@ defmodule ICalendar.RecurrenceMonthlyTest do
     end
   end
 
-  describe "FREQ=MONTHLY - BYSETPOS (currently not supported)" do
-    @tag :skip
+  describe "FREQ=MONTHLY - BYSETPOS" do
     test "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=1" do
       results =
         create_ical_event(
@@ -289,7 +288,6 @@ defmodule ICalendar.RecurrenceMonthlyTest do
              ] = results
     end
 
-    @tag :skip
     test "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1" do
       results =
         create_ical_event(
@@ -302,8 +300,8 @@ defmodule ICalendar.RecurrenceMonthlyTest do
       assert [
                # Oct 31 (Thu)
                ~U[2025-10-31 07:00:00Z],
-               # Nov 29 (Fri)
-               ~U[2025-11-29 07:00:00Z],
+               # Nov 28 (Fri)
+               ~U[2025-11-28 07:00:00Z],
                # Dec 31 (Tue)
                ~U[2025-12-31 07:00:00Z],
                # Jan 30 (Fri)
@@ -315,7 +313,6 @@ defmodule ICalendar.RecurrenceMonthlyTest do
              ] = results
     end
 
-    @tag :skip
     test "FREQ=MONTHLY;BYDAY=SA,SU;BYSETPOS=1" do
       results =
         create_ical_event(
@@ -330,8 +327,8 @@ defmodule ICalendar.RecurrenceMonthlyTest do
                ~U[2025-10-04 07:00:00Z],
                # Nov 1 (Sat)
                ~U[2025-11-01 07:00:00Z],
-               # Dec 1 (Sun)
-               ~U[2025-12-01 07:00:00Z],
+               # Dec 6 (Sat)
+               ~U[2025-12-06 07:00:00Z],
                # Jan 3 (Sat) - Jan 1&2 are weekdays
                ~U[2026-01-03 07:00:00Z],
                # Feb 1 (Sun)
@@ -341,7 +338,6 @@ defmodule ICalendar.RecurrenceMonthlyTest do
              ] = results
     end
 
-    @tag :skip
     test "FREQ=MONTHLY;BYDAY=SA,SU;BYSETPOS=-1" do
       results =
         create_ical_event(
@@ -356,8 +352,8 @@ defmodule ICalendar.RecurrenceMonthlyTest do
                ~U[2025-10-26 07:00:00Z],
                # Nov 30 (Sun)
                ~U[2025-11-30 07:00:00Z],
-               # Dec 29 (Sun)
-               ~U[2025-12-29 07:00:00Z],
+               # Dec 28 (Sun)
+               ~U[2025-12-28 07:00:00Z],
                # Jan 31 (Sat)
                ~U[2026-01-31 07:00:00Z],
                # Feb 28 (Sat)

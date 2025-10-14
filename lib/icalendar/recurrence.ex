@@ -11,7 +11,7 @@ defmodule ICalendar.Recurrence do
   alias ICalendar.Event
 
   # ignore :byhour, :bymonthday, :byyearday, :byweekno for now
-  @supported_by_x_rrules [:byday, :bymonth]
+  @supported_by_x_rrules [:byday, :bymonth, :bysetpos]
 
   # Get the logical datetime for recurrence calculations.
   #
@@ -136,7 +136,14 @@ defmodule ICalendar.Recurrence do
       if by_x_rrules != %{} do
         # If there are any by_x modifiers in the rrule, build reference events based on them
         # Remove the invalid reference events later on
-        build_refernce_events_by_x_rules(event, by_x_rrules)
+        # NOTE: BYSETPOS is handled specially in monthly frequency, not as reference events
+        by_x_rrules_for_references = Map.delete(by_x_rrules, :bysetpos)
+
+        if by_x_rrules_for_references != %{} do
+          build_refernce_events_by_x_rules(event, by_x_rrules_for_references)
+        else
+          [event]
+        end
       else
         [event]
       end
@@ -182,47 +189,65 @@ defmodule ICalendar.Recurrence do
         add_recurring_events_until(event, reference_events, end_date, days: 7)
 
       %{freq: "MONTHLY", count: count, interval: interval} ->
-        if has_nth_weekday_byday_rule?(event) do
-          add_monthly_nth_weekday_recurring_events_count(event, count, interval)
-        else
-          add_recurring_events_count(event, reference_events, count, months: interval)
+        cond do
+          has_nth_weekday_byday_rule?(event) ->
+            add_monthly_nth_weekday_recurring_events_count(event, count, interval)
+          has_bysetpos_with_simple_byday_rule?(event) ->
+            add_monthly_bysetpos_recurring_events_count(event, count, interval)
+          true ->
+            add_recurring_events_count(event, reference_events, count, months: interval)
         end
 
       %{freq: "MONTHLY", until: until, interval: interval} ->
-        if has_nth_weekday_byday_rule?(event) do
-          add_monthly_nth_weekday_recurring_events_until(event, until, interval)
-        else
-          add_recurring_events_until(event, reference_events, until, months: interval)
+        cond do
+          has_nth_weekday_byday_rule?(event) ->
+            add_monthly_nth_weekday_recurring_events_until(event, until, interval)
+          has_bysetpos_with_simple_byday_rule?(event) ->
+            add_monthly_bysetpos_recurring_events_until(event, until, interval)
+          true ->
+            add_recurring_events_until(event, reference_events, until, months: interval)
         end
 
       %{freq: "MONTHLY", count: count} ->
-        if has_nth_weekday_byday_rule?(event) do
-          add_monthly_nth_weekday_recurring_events_count(event, count, 1)
-        else
-          add_recurring_events_count(event, reference_events, count, months: 1)
+        cond do
+          has_nth_weekday_byday_rule?(event) ->
+            add_monthly_nth_weekday_recurring_events_count(event, count, 1)
+          has_bysetpos_with_simple_byday_rule?(event) ->
+            add_monthly_bysetpos_recurring_events_count(event, count, 1)
+          true ->
+            add_recurring_events_count(event, reference_events, count, months: 1)
         end
 
       %{freq: "MONTHLY", until: until} ->
-        if has_nth_weekday_byday_rule?(event) do
-          add_monthly_nth_weekday_recurring_events_until(event, until, 1)
-        else
-          add_recurring_events_until(event, reference_events, until, months: 1)
+        cond do
+          has_nth_weekday_byday_rule?(event) ->
+            add_monthly_nth_weekday_recurring_events_until(event, until, 1)
+          has_bysetpos_with_simple_byday_rule?(event) ->
+            add_monthly_bysetpos_recurring_events_until(event, until, 1)
+          true ->
+            add_recurring_events_until(event, reference_events, until, months: 1)
         end
 
       %{freq: "MONTHLY", interval: interval} ->
         # Check if this is a BYDAY rule that requires special handling
-        if has_nth_weekday_byday_rule?(event) do
-          add_monthly_nth_weekday_recurring_events_until(event, end_date, interval)
-        else
-          add_recurring_events_until(event, reference_events, end_date, months: interval)
+        cond do
+          has_nth_weekday_byday_rule?(event) ->
+            add_monthly_nth_weekday_recurring_events_until(event, end_date, interval)
+          has_bysetpos_with_simple_byday_rule?(event) ->
+            add_monthly_bysetpos_recurring_events_until(event, end_date, interval)
+          true ->
+            add_recurring_events_until(event, reference_events, end_date, months: interval)
         end
 
       %{freq: "MONTHLY"} ->
         # Check if this is a BYDAY rule that requires special handling
-        if has_nth_weekday_byday_rule?(event) do
-          add_monthly_nth_weekday_recurring_events_until(event, end_date, 1)
-        else
-          add_recurring_events_until(event, reference_events, end_date, months: 1)
+        cond do
+          has_nth_weekday_byday_rule?(event) ->
+            add_monthly_nth_weekday_recurring_events_until(event, end_date, 1)
+          has_bysetpos_with_simple_byday_rule?(event) ->
+            add_monthly_bysetpos_recurring_events_until(event, end_date, 1)
+          true ->
+            add_recurring_events_until(event, reference_events, end_date, months: 1)
         end
 
       %{freq: "YEARLY", count: count, interval: interval} ->
@@ -717,6 +742,20 @@ defmodule ICalendar.Recurrence do
     end
   end
 
+  # Check if this event has BYSETPOS with simple BYDAY rules (e.g., BYDAY=MO,TU,WE,TH,FR;BYSETPOS=1)
+  defp has_bysetpos_with_simple_byday_rule?(event) do
+    case event.rrule do
+      %{byday: bydays, bysetpos: bysetpos} when is_list(bydays) and is_list(bysetpos) ->
+        # Has both BYDAY and BYSETPOS, and BYDAY contains only simple weekday names (no nth patterns)
+        Enum.all?(bydays, fn byday ->
+          byday in @valid_days
+        end)
+
+      _ ->
+        false
+    end
+  end
+
   defp add_monthly_nth_weekday_recurring_events_count(original_event, count, interval) do
     # For COUNT-based recurrence, we generate exactly count-1 recurrences
     # (because the original event counts as the first occurrence)
@@ -796,6 +835,146 @@ defmodule ICalendar.Recurrence do
       # Fallback to regular recurrence if we can't parse the BYDAY rule
       Stream.map([], fn x -> x end)
     end
+  end
+
+  # Handle monthly recurrence with BYSETPOS and simple BYDAY rules
+  defp add_monthly_bysetpos_recurring_events_count(original_event, count, interval) do
+    # For COUNT-based recurrence, we generate exactly count-1 recurrences
+    # (because the original event counts as the first occurrence)
+    add_monthly_bysetpos_recurring_events_until(original_event, nil, interval)
+    |> Stream.take(count - 1)
+  end
+
+  defp add_monthly_bysetpos_recurring_events_until(original_event, until, interval) do
+    logical_dtstart = get_logical_datetime(original_event)
+    logical_dtend = get_logical_datetime(original_event, :dtend)
+
+    # Get the BYDAY and BYSETPOS rules
+    byday_list = original_event.rrule.byday
+    bysetpos_list = original_event.rrule.bysetpos
+
+    Stream.resource(
+      fn ->
+        # Start from the month after the original event
+        start_date = Date.beginning_of_month(logical_dtstart)
+        next_month_start = Date.add(start_date, Date.days_in_month(start_date) * interval)
+        next_month_start
+      end,
+      fn month_start ->
+        until_date = if until, do: DateTime.to_date(until), else: nil
+        if is_nil(until_date) or Date.compare(month_start, until_date) != :gt do
+          # Generate all weekday candidates for this month
+          month_candidates = generate_monthly_weekday_candidates(
+            original_event,
+            month_start,
+            byday_list,
+            logical_dtstart,
+            logical_dtend
+          )
+
+          # Apply BYSETPOS filtering to select specific positions
+          selected_events = apply_monthly_bysetpos_filter(month_candidates, bysetpos_list)
+
+          # Filter by until date if specified
+          filtered_events =
+            if until do
+              Enum.filter(selected_events, fn event ->
+                DateTime.compare(event.dtstart, until) != :gt
+              end)
+            else
+              selected_events
+            end
+
+          # Move to next month
+          next_month_start = Date.add(month_start, Date.days_in_month(month_start) * interval)
+
+          {filtered_events, next_month_start}
+        else
+          {:halt, month_start}
+        end
+      end,
+      fn _ -> :ok end
+    )
+  end
+
+  # Generate all weekday candidates for a given month based on BYDAY rules
+  defp generate_monthly_weekday_candidates(original_event, month_start, byday_list, logical_dtstart, logical_dtend) do
+    duration = DateTime.diff(logical_dtend, logical_dtstart, :second)
+
+    byday_list
+    |> Enum.flat_map(fn weekday ->
+      # Find all occurrences of this weekday in the month
+      find_weekdays_in_month(month_start, weekday)
+    end)
+    |> Enum.sort()  # Sort the dates
+    |> Enum.map(fn date ->
+      # Create event for this date
+      reference_dtstart = create_reference_datetime_for_date(date, logical_dtstart, original_event)
+      reference_dtend = DateTime.add(reference_dtstart, duration, :second)
+
+      Map.merge(original_event, %{
+        dtstart: DateTime.truncate(reference_dtstart, :second),
+        dtend: DateTime.truncate(reference_dtend, :second),
+        rrule: Map.put(original_event.rrule, :is_recurrence, true)
+      })
+    end)
+  end
+
+  # Find all dates in a month that fall on the specified weekday
+  defp find_weekdays_in_month(month_start, weekday) do
+    weekday_number = Map.get(@weekday_to_number, weekday)
+
+    if weekday_number do
+      month_end = Date.end_of_month(month_start)
+
+      # Find the first occurrence of this weekday in the month
+      first_occurrence = find_first_weekday_in_month(month_start, weekday_number)
+
+      # Generate all occurrences by adding 7 days each time
+      Stream.iterate(first_occurrence, &Date.add(&1, 7))
+      |> Stream.take_while(&(Date.compare(&1, month_end) != :gt))
+      |> Enum.to_list()
+    else
+      []
+    end
+  end
+
+  # Find the first occurrence of a weekday (1=Monday, 7=Sunday) in a month
+  defp find_first_weekday_in_month(month_start, target_weekday) do
+    current_weekday = Date.day_of_week(month_start)
+
+    # Calculate days to add to get to the target weekday
+    # Convert Sunday from 7 to 0 for easier calculation
+    target = if target_weekday == 7, do: 0, else: target_weekday
+    current = if current_weekday == 7, do: 0, else: current_weekday
+
+    days_to_add = rem(target - current + 7, 7)
+    Date.add(month_start, days_to_add)
+  end
+
+  # Apply BYSETPOS filtering to monthly weekday candidates
+  defp apply_monthly_bysetpos_filter(candidates, bysetpos_list) do
+    # Sort candidates by date to ensure consistent ordering
+    sorted_candidates = Enum.sort_by(candidates, & &1.dtstart, DateTime)
+
+    bysetpos_list
+    |> Enum.flat_map(fn position ->
+      if position > 0 do
+        # Positive positions: 1-based indexing from the start
+        case Enum.at(sorted_candidates, position - 1) do
+          nil -> []
+          event -> [event]
+        end
+      else
+        # Negative positions: -1 is last, -2 is second to last, etc.
+        case Enum.at(sorted_candidates, position) do
+          nil -> []
+          event -> [event]
+        end
+      end
+    end)
+    |> Enum.uniq_by(& &1.dtstart)  # Remove duplicates if same position specified multiple times
+    |> Enum.sort_by(& &1.dtstart, DateTime)  # Keep events sorted
   end
 
   defp remove_excluded_dates(recurrences, original_event) do
