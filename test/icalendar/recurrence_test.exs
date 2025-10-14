@@ -413,4 +413,82 @@ defmodule ICalendar.RecurrenceTest do
     # Thu UTC = Fri 00:00 Auckland (+2 weeks)
     assert event.dtstart == ~U[2026-01-08 11:00:00Z]
   end
+
+  test "yearly recurring event with bymonth and until" do
+    events =
+      """
+      BEGIN:VCALENDAR
+      CALSCALE:GREGORIAN
+      VERSION:2.0
+      BEGIN:VEVENT
+      RRULE:FREQ=YEARLY;BYMONTH=4,9;UNTIL=20250101T000000Z
+      DESCRIPTION:Quarterly meeting
+      DTEND:20240415T100000Z
+      DTSTART:20240415T090000Z
+      SUMMARY:Quarterly Review
+      END:VEVENT
+      END:VCALENDAR
+      """
+      |> ICalendar.from_ics()
+      |> Enum.map(fn event ->
+        recurrences =
+          ICalendar.Recurrence.get_recurrences(event)
+          |> Enum.to_list()
+
+        [event | recurrences]
+      end)
+      |> List.flatten()
+
+    # With BYMONTH=4,9 and UNTIL=20250101, we should get events in April and September 2024
+    assert events |> Enum.count() == 2
+
+    # Original/First event in April 2024
+    [event | events] = events
+    assert event.dtstart == ~U[2024-04-15 09:00:00Z]
+
+    # Second event in September 2024
+    [event] = events
+    assert event.dtstart == ~U[2024-09-15 09:00:00Z]
+  end
+
+  test "yearly recurring event with bymonth and count" do
+    events =
+      """
+      BEGIN:VCALENDAR
+      CALSCALE:GREGORIAN
+      VERSION:2.0
+      BEGIN:VEVENT
+      RRULE:FREQ=YEARLY;BYMONTH=6;COUNT=3
+      DESCRIPTION:Annual summer event
+      DTEND:20240615T160000Z
+      DTSTART:20240615T150000Z
+      SUMMARY:Summer Festival
+      END:VEVENT
+      END:VCALENDAR
+      """
+      |> ICalendar.from_ics()
+      |> Enum.map(fn event ->
+        recurrences =
+          ICalendar.Recurrence.get_recurrences(event)
+          |> Enum.to_list()
+
+        [event | recurrences]
+      end)
+      |> List.flatten()
+
+    # With COUNT=3, we should get the original event plus 2 yearly recurrences
+    assert events |> Enum.count() == 3
+
+    # Original event in June 2024
+    [event | events] = events
+    assert event.dtstart == ~U[2024-06-15 15:00:00Z]
+
+    # First recurrence in June 2025
+    [event | events] = events
+    assert event.dtstart == ~U[2025-06-15 15:00:00Z]
+
+    # Second recurrence in June 2026
+    [event] = events
+    assert event.dtstart == ~U[2026-06-15 15:00:00Z]
+  end
 end

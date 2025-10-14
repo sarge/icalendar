@@ -10,8 +10,8 @@ defmodule ICalendar.Recurrence do
 
   alias ICalendar.Event
 
-  # ignore :byhour, :monthday, :byyearday, :byweekno, :bymonth for now
-  @supported_by_x_rrules [:byday]
+  # ignore :byhour, :bymonthday, :byyearday, :byweekno for now
+  @supported_by_x_rrules [:byday, :bymonth]
 
   # Get the logical datetime for recurrence calculations.
   #
@@ -103,6 +103,7 @@ defmodule ICalendar.Recurrence do
       This takes precedence over the `end_date` parameter.
 
     - `byday` *(optional)*: Represents the days of the week at which events occur.
+    - `bymonth` *(optional)*: Represents the months at which events occur.
 
     The `freq` option is required for a valid rrule, but the others are
     optional. They may be used either individually (ex. just `freq`) or in
@@ -113,7 +114,6 @@ defmodule ICalendar.Recurrence do
     - `byhour` *(optional)*: Represents the hours of the day at which events occur.
     - `byweekno` *(optional)*: Represents the week number at which events occur.
     - `bymonthday` *(optional)*: Represents the days of the month at which events occur.
-    - `bymonth` *(optional)*: Represents the months at which events occur.
     - `byyearday` *(optional)*: Represents the days of the year at which events occur.
 
   ## Examples
@@ -217,17 +217,33 @@ defmodule ICalendar.Recurrence do
   end
 
   defp add_recurring_events_until(original_event, reference_events, until, shift_opts) do
-    Stream.resource(
-      fn -> [reference_events] end,
-      fn acc_events ->
-        # Use the previous batch of the events as the reference for the next batch
-        [prev_event_batch | _] = acc_events
+    # Check if we have reference events that represent additional occurrences in the same period
+    # (e.g., BYMONTH creating events in the same year, or BYDAY creating events in the same week)
+    additional_reference_events =
+      Enum.filter(reference_events, fn ref_event ->
+        # Include reference events that are after the original event and before/at the until date
+        DateTime.compare(ref_event.dtstart, original_event.dtstart) == :gt and
+        Timex.compare(ref_event.dtstart, until) != 1
+      end)
 
-        case prev_event_batch do
-          [] ->
+    Stream.resource(
+      fn ->
+        if additional_reference_events != [] do
+          [:emit_references, reference_events]
+        else
+          [reference_events]
+        end
+      end,
+      fn acc_events ->
+        case acc_events do
+          [:emit_references | [prev_event_batch]] ->
+            # First emit the additional reference events, then set up for regular recurrences
+            {remove_excluded_dates(additional_reference_events, original_event), [prev_event_batch]}
+
+          [prev_event_batch | _] when prev_event_batch == [] ->
             {:halt, acc_events}
 
-          prev_event_batch ->
+          [prev_event_batch | _] ->
             new_events =
               Enum.map(prev_event_batch, fn reference_event ->
                 new_event = shift_event(reference_event, shift_opts)
@@ -317,6 +333,86 @@ defmodule ICalendar.Recurrence do
   @day_values %{su: 0, mo: 1, tu: 2, we: 3, th: 4, fr: 5, sa: 6}
 
   defp build_refernce_events_by_x_rule(
+         %{rrule: %{bymonth: bymonths}} = event,
+         :bymonth
+       ) do
+    logical_dtstart = get_logical_datetime(event)
+    logical_dtend = get_logical_datetime(event, :dtend)
+
+    # For BYMONTH, create reference events for all specified months
+    # Include the original event if its month is in the bymonths list
+    reference_events = bymonths
+    |> Enum.map(fn bymonth ->
+      month = String.to_integer(bymonth)
+
+      if month >= 1 and month <= 12 do
+        # For BYMONTH, we create events for each specified month in the original year
+        year = logical_dtstart.year
+
+        # Create new datetime with the target month, keeping the same day and time
+        {:ok, reference_dtstart} = DateTime.new(
+          Date.new!(year, month, logical_dtstart.day),
+          Time.new!(logical_dtstart.hour, logical_dtstart.minute, logical_dtstart.second),
+          logical_dtstart.time_zone
+        )
+
+        {:ok, reference_dtend} = DateTime.new(
+          Date.new!(year, month, logical_dtend.day),
+          Time.new!(logical_dtend.hour, logical_dtend.minute, logical_dtend.second),
+          logical_dtend.time_zone
+        )
+
+        # Handle X-WR-TIMEZONE conversion pattern similar to byday
+        {final_dtstart, final_dtend} =
+          case event.x_wr_timezone do
+            nil ->
+              {reference_dtstart, reference_dtend}
+
+            timezone when is_binary(timezone) ->
+              if is_likely_converted_date_only_value?(event.dtstart, timezone) do
+                # For date-only conversions, we need to maintain the conversion pattern
+                original_date_start = Date.new!(year, month, logical_dtstart.day)
+                original_date_end = Date.new!(year, month, logical_dtend.day)
+
+                original_dt_start = DateTime.from_naive!(Timex.to_naive_datetime(original_date_start), timezone)
+                original_dt_end = DateTime.from_naive!(Timex.to_naive_datetime(original_date_end), timezone)
+
+                {DateTime.shift_zone!(original_dt_start, "Etc/UTC"),
+                 DateTime.shift_zone!(original_dt_end, "Etc/UTC")}
+              else
+                {reference_dtstart, reference_dtend}
+              end
+          end
+
+        Map.merge(event, %{
+          dtstart: DateTime.truncate(final_dtstart, :second),
+          dtend: DateTime.truncate(final_dtend, :second)
+        })
+      else
+        # Ignore invalid month values
+        nil
+      end
+    end)
+    |> Enum.filter(&(!is_nil(&1)))
+
+    # Sort by date and only return events that are > the original event date
+    # This excludes the original event itself from the reference events
+    filtered_events = reference_events
+    |> Enum.filter(fn ref_event ->
+      DateTime.compare(ref_event.dtstart, logical_dtstart) == :gt
+    end)
+    |> Enum.sort_by(& &1.dtstart, DateTime)
+
+    # If no additional reference events (all months are <= current month),
+    # return the original event as the only reference
+    if filtered_events == [] do
+      [event]
+    else
+      filtered_events
+    end
+  end
+
+  defp build_refernce_events_by_x_rule(
          %{rrule: %{byday: bydays}} = event,
          :byday
        ) do
@@ -372,6 +468,11 @@ defmodule ICalendar.Recurrence do
       end
     end)
     |> Enum.filter(&(!is_nil(&1)))
+  end
+
+  defp build_refernce_events_by_x_rule(event, _unsupported_by_x) do
+    # Return original event for unsupported by_x rules
+    [event]
   end
 
   defp remove_excluded_dates(recurrences, original_event) do
