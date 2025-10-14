@@ -414,6 +414,68 @@ defmodule ICalendar.RecurrenceTest do
     assert event.dtstart == ~U[2026-01-08 11:00:00Z]
   end
 
+  test "weekly recurring event with date-only values and BYDAY omit INTERVAL and COUNT" do
+    events =
+      """
+      BEGIN:VCALENDAR
+      PRODID:-//Google Inc//Google Calendar 70.9054//EN
+      VERSION:2.0
+      CALSCALE:GREGORIAN
+      X-WR-CALNAME:Liberation
+      X-WR-TIMEZONE:Pacific/Auckland
+      BEGIN:VEVENT
+      DTSTART;VALUE=DATE:20251114
+      DTEND;VALUE=DATE:20251115
+      RRULE:FREQ=WEEKLY;WKST=SU;BYDAY=FR
+      DTSTAMP:20251002T041046Z
+      UID:55v24sq3ih6oto8ib9bu4a7352@google.com
+      CREATED:20251002T041045Z
+      DESCRIPTION:
+      LAST-MODIFIED:20251002T041046Z
+      LOCATION:
+      SEQUENCE:0
+      STATUS:CONFIRMED
+      SUMMARY:Fridays off
+      TRANSP:TRANSPARENT
+      END:VEVENT
+      END:VCALENDAR
+      """
+      |> ICalendar.from_ics()
+      |> Enum.map(fn event ->
+        # Provide explicit end date to ensure recurrences are generated
+        end_date = ~U[2027-01-01 00:00:00Z]
+
+        recurrences =
+          ICalendar.Recurrence.get_recurrences(event, end_date)
+          # Take first 4 recurrences
+          |> Enum.take(4)
+
+        [event | recurrences]
+      end)
+      |> List.flatten()
+
+    assert events |> Enum.count() == 5
+
+    # All events represent "Friday midnight Auckland" converted to "Thursday 11:00 UTC"
+    # The RRULE:FREQ=WEEKLY;BYDAY=FR generates recurrences every week on Friday (Auckland time)
+    # All times maintain consistent timezone conversion: Fri 00:00 Auckland → Thu 11:00 UTC
+    [event | events] = events
+    # Thu UTC = Fri 00:00 Auckland (original)
+    assert event.dtstart == ~U[2025-11-13 11:00:00Z]
+    [event | events] = events
+    # Thu UTC = Fri 00:00 Auckland (+1 week)
+    assert event.dtstart == ~U[2025-11-20 11:00:00Z]
+    [event | events] = events
+    # Thu UTC = Fri 00:00 Auckland (+1 week)
+    assert event.dtstart == ~U[2025-11-27 11:00:00Z]
+    [event | events] = events
+    # Thu UTC = Fri 00:00 Auckland (+1 week)
+    assert event.dtstart == ~U[2025-12-04 11:00:00Z]
+    [event] = events
+    # Thu UTC = Fri 00:00 Auckland (+1 week)
+    assert event.dtstart == ~U[2025-12-11 11:00:00Z]
+  end
+
   test "yearly recurring event with bymonth and until" do
     events =
       """
@@ -490,5 +552,55 @@ defmodule ICalendar.RecurrenceTest do
     # Second recurrence in June 2026
     [event] = events
     assert event.dtstart == ~U[2026-06-15 15:00:00Z]
+  end
+
+  test "monthly recurring event with byday until and count omitted" do
+    events =
+      """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      CALSCALE:GREGORIAN
+      X-WR-TIMEZONE:UTC
+      BEGIN:VEVENT
+      DTSTART;VALUE=DATE:20251003
+      DTEND;VALUE=DATE:20251004
+      RRULE:FREQ=MONTHLY;BYDAY=3TH
+      DTSTAMP:20250920T053811Z
+      LAST-MODIFIED:20250920T053811Z
+      SEQUENCE:0
+      STATUS:CONFIRMED
+      SUMMARY:Monthly on the 3rd Thursday
+      TRANSP:TRANSPARENT
+      END:VEVENT
+      END:VCALENDAR
+      """
+      |> ICalendar.from_ics()
+      |> Enum.map(fn event ->
+        recurrences =
+          ICalendar.Recurrence.get_recurrences(event, ~U[2025-12-31 23:59:59Z])
+          # Take only first 3 recurrences
+          |> Enum.take(3)
+
+        [event | recurrences]
+      end)
+      |> List.flatten()
+
+    assert events |> Enum.count() == 4
+
+    # First event - original (Oct 3, 2025)
+    [event | events] = events
+    assert event.dtstart == ~U[2025-10-03 00:00:00Z]
+
+    # Second event - 3rd Thursday of Oct 2025
+    [event | events] = events
+    assert event.dtstart == ~U[2025-10-16 00:00:00Z]
+
+    # Third event - 3rd Thursday of Nov 2025
+    [event | events] = events
+    assert event.dtstart == ~U[2025-11-20 00:00:00Z]
+
+    # Fourth event - 3rd Thursday of Dec 2025
+    [event] = events
+    assert event.dtstart == ~U[2025-12-18 00:00:00Z]
   end
 end
