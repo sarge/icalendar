@@ -64,6 +64,26 @@ defmodule ICalendar.RecurrenceExtendedTest do
     end
   end
 
+  describe "FREQ=WEEKLY" do
+    test "FREQ=WEEKLY;UNTIL" do
+      results =
+        create_ical_event(
+          ~U[2025-10-14 07:00:00Z],
+          "FREQ=WEEKLY;UNTIL=20251111T070000Z"
+        )
+
+      assert [
+               ~U[2025-10-14 07:00:00Z],
+               ~U[2025-10-21 07:00:00Z],
+               ~U[2025-10-28 07:00:00Z],
+               ~U[2025-11-04 07:00:00Z],
+               ~U[2025-11-11 07:00:00Z]
+             ] = results
+    end
+  end
+
+
+
   describe "FREQ=MONTHLY" do
     test "FREQ=MONTHLY" do
       results =
@@ -77,11 +97,11 @@ defmodule ICalendar.RecurrenceExtendedTest do
                ~U[2025-11-14 07:00:00Z],
                ~U[2025-12-14 07:00:00Z],
                ~U[2026-01-14 07:00:00Z],
-               ~U[2026-02-14 07:00:00Z],
+               ~U[2026-02-14 07:00:00Z]
              ] = results
     end
 
-test "FREQ=MONTHLY;BYDAY=" do
+    test "FREQ=MONTHLY;BYDAY=2WE" do
       results =
         create_ical_event(
           ~U[2025-10-08 07:00:00Z],
@@ -93,7 +113,7 @@ test "FREQ=MONTHLY;BYDAY=" do
                ~U[2025-11-12 07:00:00Z],
                ~U[2025-12-10 07:00:00Z],
                ~U[2026-01-14 07:00:00Z],
-               ~U[2026-02-11 07:00:00Z],
+               ~U[2026-02-11 07:00:00Z]
              ] = results
     end
   end
@@ -111,7 +131,7 @@ test "FREQ=MONTHLY;BYDAY=" do
                ~U[2026-10-14 07:00:00Z],
                ~U[2027-10-14 07:00:00Z],
                ~U[2028-10-14 07:00:00Z],
-               ~U[2029-10-14 07:00:00Z],
+               ~U[2029-10-14 07:00:00Z]
              ] = results
     end
   end
