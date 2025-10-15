@@ -264,22 +264,40 @@ defmodule ICalendar.Recurrence do
         add_recurring_events_until(event, reference_events, end_date, years: 1)
 
       %{freq: "HOURLY", count: count, interval: interval} ->
-        add_recurring_events_count(event, reference_events, count, hours: interval)
+        shift_opts =
+          if Map.has_key?(event.rrule, :byhour),
+            do: [days: interval],
+            else: [hours: interval]
+
+        add_recurring_events_count(event, reference_events, count, shift_opts)
 
       %{freq: "HOURLY", until: until, interval: interval} ->
-        add_recurring_events_until(event, reference_events, until, hours: interval)
+        shift_opts =
+          if Map.has_key?(event.rrule, :byhour),
+            do: [days: interval],
+            else: [hours: interval]
+
+        add_recurring_events_until(event, reference_events, until, shift_opts)
 
       %{freq: "HOURLY", count: count} ->
-        add_recurring_events_count(event, reference_events, count, hours: 1)
+        shift_opts = if Map.has_key?(event.rrule, :byhour), do: [days: 1], else: [hours: 1]
+        add_recurring_events_count(event, reference_events, count, shift_opts)
 
       %{freq: "HOURLY", until: until} ->
-        add_recurring_events_until(event, reference_events, until, hours: 1)
+        shift_opts = if Map.has_key?(event.rrule, :byhour), do: [days: 1], else: [hours: 1]
+        add_recurring_events_until(event, reference_events, until, shift_opts)
 
       %{freq: "HOURLY", interval: interval} ->
-        add_recurring_events_until(event, reference_events, end_date, hours: interval)
+        shift_opts =
+          if Map.has_key?(event.rrule, :byhour),
+            do: [days: interval],
+            else: [hours: interval]
+
+        add_recurring_events_until(event, reference_events, end_date, shift_opts)
 
       %{freq: "HOURLY"} ->
-        add_recurring_events_until(event, reference_events, end_date, hours: 1)
+        shift_opts = if Map.has_key?(event.rrule, :byhour), do: [days: 1], else: [hours: 1]
+        add_recurring_events_until(event, reference_events, end_date, shift_opts)
     end
   end
 
