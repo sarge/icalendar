@@ -39,8 +39,7 @@ defmodule ICalendar.RecurrenceHighFrequencyTest do
     end)
   end
 
-  describe "FREQ=HOURLY (currently not supported)" do
-    @tag :skip
+  describe "FREQ=HOURLY" do
     test "FREQ=HOURLY" do
       results =
         create_ical_event(

@@ -262,6 +262,24 @@ defmodule ICalendar.Recurrence do
 
       %{freq: "YEARLY"} ->
         add_recurring_events_until(event, reference_events, end_date, years: 1)
+
+      %{freq: "HOURLY", count: count, interval: interval} ->
+        add_recurring_events_count(event, reference_events, count, hours: interval)
+
+      %{freq: "HOURLY", until: until, interval: interval} ->
+        add_recurring_events_until(event, reference_events, until, hours: interval)
+
+      %{freq: "HOURLY", count: count} ->
+        add_recurring_events_count(event, reference_events, count, hours: 1)
+
+      %{freq: "HOURLY", until: until} ->
+        add_recurring_events_until(event, reference_events, until, hours: 1)
+
+      %{freq: "HOURLY", interval: interval} ->
+        add_recurring_events_until(event, reference_events, end_date, hours: interval)
+
+      %{freq: "HOURLY"} ->
+        add_recurring_events_until(event, reference_events, end_date, hours: 1)
     end
   end
 
