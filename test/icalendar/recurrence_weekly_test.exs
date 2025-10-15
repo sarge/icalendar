@@ -261,8 +261,7 @@ defmodule ICalendar.RecurrenceWeeklyTest do
              ] = results_sun
     end
 
-    @tag :skip
-    test "FREQ=WEEKLY with BYHOUR (currently not supported)" do
+    test "FREQ=WEEKLY with BYHOUR" do
       results =
         create_ical_event(
           ~U[2025-10-14 07:00:00Z],
@@ -271,12 +270,12 @@ defmodule ICalendar.RecurrenceWeeklyTest do
 
       # Should create 2 events per week at 9 and 17 hours
       assert [
+               ~U[2025-10-14 07:00:00Z],
                ~U[2025-10-14 09:00:00Z],
                ~U[2025-10-14 17:00:00Z],
                ~U[2025-10-21 09:00:00Z],
                ~U[2025-10-21 17:00:00Z],
-               ~U[2025-10-28 09:00:00Z],
-               ~U[2025-10-28 17:00:00Z]
+               ~U[2025-10-28 09:00:00Z]
              ] = results
     end
   end

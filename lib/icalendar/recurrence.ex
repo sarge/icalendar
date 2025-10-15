@@ -11,7 +11,7 @@ defmodule ICalendar.Recurrence do
   alias ICalendar.Event
 
   # ignore :byhour, :bymonthday, :byyearday, :byweekno for now
-  @supported_by_x_rrules [:byday, :bymonth, :bysetpos]
+  @supported_by_x_rrules [:byday, :bymonth, :bysetpos, :byhour]
 
   # Get the logical datetime for recurrence calculations.
   #
@@ -129,24 +129,7 @@ defmodule ICalendar.Recurrence do
   @spec get_recurrences(%Event{}) :: %Stream{}
   @spec get_recurrences(%Event{}, %DateTime{}) :: %Stream{}
   def get_recurrences(event, end_date \\ DateTime.utc_now()) do
-    by_x_rrules =
-      if is_map(event.rrule), do: Map.take(event.rrule, @supported_by_x_rrules), else: %{}
-
-    reference_events =
-      if by_x_rrules != %{} do
-        # If there are any by_x modifiers in the rrule, build reference events based on them
-        # Remove the invalid reference events later on
-        # NOTE: BYSETPOS is handled specially in monthly frequency, not as reference events
-        by_x_rrules_for_references = Map.delete(by_x_rrules, :bysetpos)
-
-        if by_x_rrules_for_references != %{} do
-          build_refernce_events_by_x_rules(event, by_x_rrules_for_references)
-        else
-          [event]
-        end
-      else
-        [event]
-      end
+    reference_events = get_reference_events(event)
 
     case event.rrule do
       nil ->
@@ -192,8 +175,10 @@ defmodule ICalendar.Recurrence do
         cond do
           has_nth_weekday_byday_rule?(event) ->
             add_monthly_nth_weekday_recurring_events_count(event, count, interval)
+
           has_bysetpos_with_simple_byday_rule?(event) ->
             add_monthly_bysetpos_recurring_events_count(event, count, interval)
+
           true ->
             add_recurring_events_count(event, reference_events, count, months: interval)
         end
@@ -202,8 +187,10 @@ defmodule ICalendar.Recurrence do
         cond do
           has_nth_weekday_byday_rule?(event) ->
             add_monthly_nth_weekday_recurring_events_until(event, until, interval)
+
           has_bysetpos_with_simple_byday_rule?(event) ->
             add_monthly_bysetpos_recurring_events_until(event, until, interval)
+
           true ->
             add_recurring_events_until(event, reference_events, until, months: interval)
         end
@@ -212,8 +199,10 @@ defmodule ICalendar.Recurrence do
         cond do
           has_nth_weekday_byday_rule?(event) ->
             add_monthly_nth_weekday_recurring_events_count(event, count, 1)
+
           has_bysetpos_with_simple_byday_rule?(event) ->
             add_monthly_bysetpos_recurring_events_count(event, count, 1)
+
           true ->
             add_recurring_events_count(event, reference_events, count, months: 1)
         end
@@ -222,8 +211,10 @@ defmodule ICalendar.Recurrence do
         cond do
           has_nth_weekday_byday_rule?(event) ->
             add_monthly_nth_weekday_recurring_events_until(event, until, 1)
+
           has_bysetpos_with_simple_byday_rule?(event) ->
             add_monthly_bysetpos_recurring_events_until(event, until, 1)
+
           true ->
             add_recurring_events_until(event, reference_events, until, months: 1)
         end
@@ -233,8 +224,10 @@ defmodule ICalendar.Recurrence do
         cond do
           has_nth_weekday_byday_rule?(event) ->
             add_monthly_nth_weekday_recurring_events_until(event, end_date, interval)
+
           has_bysetpos_with_simple_byday_rule?(event) ->
             add_monthly_bysetpos_recurring_events_until(event, end_date, interval)
+
           true ->
             add_recurring_events_until(event, reference_events, end_date, months: interval)
         end
@@ -244,8 +237,10 @@ defmodule ICalendar.Recurrence do
         cond do
           has_nth_weekday_byday_rule?(event) ->
             add_monthly_nth_weekday_recurring_events_until(event, end_date, 1)
+
           has_bysetpos_with_simple_byday_rule?(event) ->
             add_monthly_bysetpos_recurring_events_until(event, end_date, 1)
+
           true ->
             add_recurring_events_until(event, reference_events, end_date, months: 1)
         end
@@ -373,15 +368,6 @@ defmodule ICalendar.Recurrence do
 
     # Truncate microseconds to match expected format
     DateTime.truncate(result, :second)
-  end
-
-  defp build_refernce_events_by_x_rules(event, by_x_rrules) do
-    by_x_rrules
-    |> Map.keys()
-    |> Enum.map(fn by_x ->
-      build_refernce_events_by_x_rule(event, by_x)
-    end)
-    |> List.flatten()
   end
 
   @valid_days ["SU", "MO", "TU", "WE", "TH", "FR", "SA"]
@@ -542,13 +528,16 @@ defmodule ICalendar.Recurrence do
     # Special handling for FREQ=WEEKLY with explicit WKST and multiple BYDAY values:
     # When we have multiple days and one matches the current day, we need to ensure
     # we generate a reference event that will create proper recurrence cycles
-    day_offset_for_reference = case event.rrule do
-      %{freq: "WEEKLY", wkst: wkst_val, byday: byday_list}
+    day_offset_for_reference =
+      case event.rrule do
+        %{freq: "WEEKLY", wkst: wkst_val, byday: byday_list}
         when wkst_val != "MO" and length(byday_list) > 1 and base_offset == 0 ->
-        7  # Next week's occurrence for WKST cases with multiple BYDAY
-      _ ->
-        base_offset
-    end
+          # Next week's occurrence for WKST cases with multiple BYDAY
+          7
+
+        _ ->
+          base_offset
+      end
 
     # For X-WR-TIMEZONE date-only conversions, we should use the original event's
     # datetime and shift by days, preserving the timezone conversion pattern
@@ -891,15 +880,17 @@ defmodule ICalendar.Recurrence do
       end,
       fn month_start ->
         until_date = if until, do: DateTime.to_date(until), else: nil
+
         if is_nil(until_date) or Date.compare(month_start, until_date) != :gt do
           # Generate all weekday candidates for this month
-          month_candidates = generate_monthly_weekday_candidates(
-            original_event,
-            month_start,
-            byday_list,
-            logical_dtstart,
-            logical_dtend
-          )
+          month_candidates =
+            generate_monthly_weekday_candidates(
+              original_event,
+              month_start,
+              byday_list,
+              logical_dtstart,
+              logical_dtend
+            )
 
           # Apply BYSETPOS filtering to select specific positions
           selected_events = apply_monthly_bysetpos_filter(month_candidates, bysetpos_list)
@@ -927,7 +918,13 @@ defmodule ICalendar.Recurrence do
   end
 
   # Generate all weekday candidates for a given month based on BYDAY rules
-  defp generate_monthly_weekday_candidates(original_event, month_start, byday_list, logical_dtstart, logical_dtend) do
+  defp generate_monthly_weekday_candidates(
+         original_event,
+         month_start,
+         byday_list,
+         logical_dtstart,
+         logical_dtend
+       ) do
     duration = DateTime.diff(logical_dtend, logical_dtstart, :second)
 
     byday_list
@@ -935,10 +932,13 @@ defmodule ICalendar.Recurrence do
       # Find all occurrences of this weekday in the month
       find_weekdays_in_month(month_start, weekday)
     end)
-    |> Enum.sort()  # Sort the dates
+    # Sort the dates
+    |> Enum.sort()
     |> Enum.map(fn date ->
       # Create event for this date
-      reference_dtstart = create_reference_datetime_for_date(date, logical_dtstart, original_event)
+      reference_dtstart =
+        create_reference_datetime_for_date(date, logical_dtstart, original_event)
+
       reference_dtend = DateTime.add(reference_dtstart, duration, :second)
 
       Map.merge(original_event, %{
@@ -1002,8 +1002,10 @@ defmodule ICalendar.Recurrence do
         end
       end
     end)
-    |> Enum.uniq_by(& &1.dtstart)  # Remove duplicates if same position specified multiple times
-    |> Enum.sort_by(& &1.dtstart, DateTime)  # Keep events sorted
+    # Remove duplicates if same position specified multiple times
+    |> Enum.uniq_by(& &1.dtstart)
+    # Keep events sorted
+    |> Enum.sort_by(& &1.dtstart, DateTime)
   end
 
   defp remove_excluded_dates(recurrences, original_event) do
@@ -1018,5 +1020,63 @@ defmodule ICalendar.Recurrence do
       !falls_on_exdate &&
         !is_invalid_reference_event
     end)
+  end
+
+  defp expand_by_rule(events, :byhour, rrule) do
+    by_hour_values = rrule[:byhour] |> List.wrap() |> Enum.map(&String.to_integer/1)
+
+    Enum.flat_map(events, fn event ->
+      Enum.map(by_hour_values, fn hour ->
+        # Create a new dtstart with the specified hour
+        new_dtstart =
+          event.dtstart
+          |> DateTime.to_naive()
+          |> Map.put(:hour, hour)
+          |> Map.put(:minute, 0)
+          |> Map.put(:second, 0)
+          |> DateTime.from_naive!("Etc/UTC")
+
+        # Preserve the original event's duration
+        duration = Timex.diff(event.dtend, event.dtstart, :seconds)
+        new_dtend = DateTime.add(new_dtstart, duration, :second)
+
+        %{event | dtstart: new_dtstart, dtend: new_dtend}
+      end)
+    end)
+  end
+
+  defp expand_by_rule(events, :byday, _rrule) do
+    # This is a simplified version of the original byday logic
+    Enum.flat_map(events, fn event ->
+      build_refernce_events_by_x_rule(event, :byday)
+    end)
+  end
+
+  defp expand_by_rule(events, :bymonth, _rrule) do
+    Enum.flat_map(events, fn event ->
+      build_refernce_events_by_x_rule(event, :bymonth)
+    end)
+  end
+
+  defp expand_by_rule(events, :bysetpos, _rrule) do
+    # bysetpos is handled within the monthly frequency logic, not here
+    events
+  end
+
+  defp get_reference_events(event) do
+    # Start with the base event as the first reference
+    initial_events = [event]
+
+    # Sequentially apply each supported BY* rule to expand the event set
+    @supported_by_x_rrules
+    |> Enum.reduce(initial_events, fn by_rule, events ->
+      if Map.has_key?(event.rrule, by_rule) do
+        expand_by_rule(events, by_rule, event.rrule)
+      else
+        events
+      end
+    end)
+    # Sort the resulting events by their start time, as BY* rules can create them out of order
+    |> Enum.sort_by(& &1.dtstart)
   end
 end

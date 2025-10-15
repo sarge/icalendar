@@ -141,8 +141,7 @@ defmodule ICalendar.RecurrenceDailyTest do
     end
   end
 
-  describe "FREQ=DAILY - With BY* rules (currently not supported)" do
-    @tag :skip
+  describe "FREQ=DAILY - With BYHOUR rule" do
     test "FREQ=DAILY;BYHOUR=9,12,15" do
       results =
         create_ical_event(
