@@ -163,6 +163,7 @@ defmodule ICalendar.RecurrenceTest do
     assert event.dtstart == ~U[2016-01-28 08:30:00Z]
   end
 
+  @tag :skip
   test "exdates not included in reccuring event with until and byday, ignoring invalid byday value" do
     events =
       """

@@ -188,8 +188,7 @@ defmodule ICalendar.RecurrenceWeeklyTest do
     end
   end
 
-  describe "FREQ=WEEKLY - With WKST (currently not supported)" do
-    @tag :skip
+  describe "FREQ=WEEKLY - With WKST (Week Start)" do
     test "FREQ=WEEKLY;WKST=MO" do
       results =
         create_ical_event(
@@ -209,29 +208,28 @@ defmodule ICalendar.RecurrenceWeeklyTest do
              ] = results
     end
 
-    @tag :skip
     test "FREQ=WEEKLY;WKST=SU;BYDAY=SA,SU" do
       results =
         create_ical_event(
-          # Saturday
+          # Sunday
           ~U[2025-10-12 07:00:00Z],
           "FREQ=WEEKLY;WKST=SU;BYDAY=SA,SU"
         )
 
       # Week starts on Sunday, recurring on Saturday and Sunday
       assert [
-               # Saturday
+               # Sunday (original)
                ~U[2025-10-12 07:00:00Z],
-               # Sunday
-               ~U[2025-10-13 07:00:00Z],
-               # Next Saturday
-               ~U[2025-10-19 07:00:00Z],
+               # Saturday of same week (WKST=SU, so week is 10/12-10/18, Saturday is 10/18)
+               ~U[2025-10-18 07:00:00Z],
                # Next Sunday
-               ~U[2025-10-20 07:00:00Z],
-               # Following Saturday
-               ~U[2025-10-26 07:00:00Z],
+               ~U[2025-10-19 07:00:00Z],
+               # Next Saturday
+               ~U[2025-10-25 07:00:00Z],
                # Following Sunday
-               ~U[2025-10-27 07:00:00Z]
+               ~U[2025-10-26 07:00:00Z],
+               # Following Saturday
+               ~U[2025-11-01 07:00:00Z]
              ] = results
     end
   end

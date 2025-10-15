@@ -385,7 +385,6 @@ defmodule ICalendar.Recurrence do
   end
 
   @valid_days ["SU", "MO", "TU", "WE", "TH", "FR", "SA"]
-  @day_values %{su: 0, mo: 1, tu: 2, we: 3, th: 4, fr: 5, sa: 6}
   @weekday_to_number %{
     "SU" => 7,
     "MO" => 1,
@@ -395,6 +394,23 @@ defmodule ICalendar.Recurrence do
     "FR" => 5,
     "SA" => 6
   }
+
+  # Calculate day offset with WKST (Week Start) support
+  # WKST changes the start of the week, affecting how we calculate relative day positions
+  defp calculate_day_offset_with_wkst(target_day, current_date, wkst) do
+    current_weekday = Date.day_of_week(current_date)
+    target_weekday = Map.get(@weekday_to_number, target_day)
+    wkst_weekday = Map.get(@weekday_to_number, wkst)
+
+    # Convert to 0-6 range where week starts at wkst
+    current_day_in_week = rem(current_weekday - wkst_weekday + 7, 7)
+    target_day_in_week = rem(target_weekday - wkst_weekday + 7, 7)
+
+    # Calculate offset within the current week
+    offset = target_day_in_week - current_day_in_week
+
+    offset
+  end
 
   defp build_refernce_events_by_x_rule(
          %{rrule: %{bymonth: bymonths}} = event,
@@ -516,10 +532,23 @@ defmodule ICalendar.Recurrence do
   end
 
   defp build_simple_weekday_reference_event(event, byday, logical_dtstart, logical_dtend) do
-    day_atom = byday |> String.downcase() |> String.to_atom()
+    # Get WKST (Week Start) from rrule, default to Monday
+    wkst = Map.get(event.rrule, :wkst, "MO")
 
-    # determine the difference between the byday and the logical dtstart
-    day_offset_for_reference = Map.get(@day_values, day_atom) - Timex.weekday(logical_dtstart)
+    # Calculate day offset considering WKST
+    current_date = DateTime.to_date(logical_dtstart)
+    base_offset = calculate_day_offset_with_wkst(byday, current_date, wkst)
+
+    # Special handling for FREQ=WEEKLY with explicit WKST and multiple BYDAY values:
+    # When we have multiple days and one matches the current day, we need to ensure
+    # we generate a reference event that will create proper recurrence cycles
+    day_offset_for_reference = case event.rrule do
+      %{freq: "WEEKLY", wkst: wkst_val, byday: byday_list}
+        when wkst_val != "MO" and length(byday_list) > 1 and base_offset == 0 ->
+        7  # Next week's occurrence for WKST cases with multiple BYDAY
+      _ ->
+        base_offset
+    end
 
     # For X-WR-TIMEZONE date-only conversions, we should use the original event's
     # datetime and shift by days, preserving the timezone conversion pattern
