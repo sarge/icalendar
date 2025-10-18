@@ -29,12 +29,9 @@ defmodule ICalendar.RecurrenceDailyTest do
           DateTime.add(dtstart, 365, :day)
         end
 
-      recurrances =
-        ICalendar.Recurrence.get_recurrences(event, end_date)
-        |> Enum.take(5)
-        |> Enum.map(fn r -> r.dtstart end)
-
-      [event.dtstart | recurrances]
+      ICalendar.Recurrence.get_recurrences(event, end_date)
+      |> Enum.take(5)
+      |> Enum.map(fn r -> r.dtstart end)
     end)
   end
 
@@ -51,8 +48,7 @@ defmodule ICalendar.RecurrenceDailyTest do
                ~U[2025-10-18 00:00:00Z],
                ~U[2025-10-19 00:00:00Z],
                ~U[2025-10-20 00:00:00Z],
-               ~U[2025-10-21 00:00:00Z],
-               ~U[2025-10-22 00:00:00Z]
+               ~U[2025-10-21 00:00:00Z]
              ] = results
     end
 
@@ -84,8 +80,7 @@ defmodule ICalendar.RecurrenceDailyTest do
                ~U[2025-10-18 00:00:00Z],
                ~U[2025-10-19 00:00:00Z],
                ~U[2025-10-20 00:00:00Z],
-               ~U[2025-10-21 00:00:00Z],
-               ~U[2025-10-22 00:00:00Z]
+               ~U[2025-10-21 00:00:00Z]
              ] = results
     end
   end
@@ -103,8 +98,7 @@ defmodule ICalendar.RecurrenceDailyTest do
                ~U[2025-10-19 00:00:00Z],
                ~U[2025-10-21 00:00:00Z],
                ~U[2025-10-23 00:00:00Z],
-               ~U[2025-10-25 00:00:00Z],
-               ~U[2025-10-27 00:00:00Z]
+               ~U[2025-10-25 00:00:00Z]
              ] = results
     end
 
@@ -155,12 +149,27 @@ defmodule ICalendar.RecurrenceDailyTest do
                ~U[2025-10-17 12:00:00Z],
                ~U[2025-10-17 15:00:00Z],
                ~U[2025-10-18 09:00:00Z],
-               ~U[2025-10-18 12:00:00Z],
-               ~U[2025-10-18 15:00:00Z]
+               ~U[2025-10-18 12:00:00Z]
              ] = results
     end
 
-    @tag :skip
+    test "FREQ=DAILY;BYHOUR=9,12,15 include the DTSTART time if it missing" do
+      results =
+        create_ical_event(
+          ~U[2025-10-17 08:00:00Z],
+          "FREQ=DAILY;BYHOUR=9,12,15"
+        )
+
+      # Should create 3 events per day at 9, 12, and 15 hours
+      assert [
+               ~U[2025-10-17 08:00:00Z],
+               ~U[2025-10-17 09:00:00Z],
+               ~U[2025-10-17 12:00:00Z],
+               ~U[2025-10-17 15:00:00Z],
+               ~U[2025-10-18 09:00:00Z]
+             ] = results
+    end
+
     test "FREQ=DAILY;BYHOUR=9;BYMINUTE=0,30" do
       results =
         create_ical_event(
@@ -174,8 +183,7 @@ defmodule ICalendar.RecurrenceDailyTest do
                ~U[2025-10-17 09:30:00Z],
                ~U[2025-10-18 09:00:00Z],
                ~U[2025-10-18 09:30:00Z],
-               ~U[2025-10-19 09:00:00Z],
-               ~U[2025-10-19 09:30:00Z]
+               ~U[2025-10-19 09:00:00Z]
              ] = results
     end
 
