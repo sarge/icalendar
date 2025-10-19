@@ -120,18 +120,18 @@ defmodule ICalendar.RecurrenceWeeklyTest do
     end
   end
 
-  # BYDAY + weekly
-  @tag :skip
   describe "FREQ=WEEKLY - With BYDAY" do
     test "FREQ=WEEKLY;BYDAY=MO,WE,FR" do
       results =
         create_ical_event(
           # Monday
           ~U[2025-10-13 07:00:00Z],
-          "FREQ=WEEKLY;BYDAY=MO,WE,FR"
+          "FREQ=WEEKLY;BYDAY=MO,WE,FR",
+          nil,
+          6
         )
 
-      assert [
+      assert results == [
                # Monday
                ~U[2025-10-13 07:00:00Z],
                # Wednesday
@@ -144,11 +144,9 @@ defmodule ICalendar.RecurrenceWeeklyTest do
                ~U[2025-10-22 07:00:00Z],
                # Next Friday
                ~U[2025-10-24 07:00:00Z]
-             ] = results
+             ]
     end
 
-    # looks like a bad test
-    @tag :skip
     test "FREQ=WEEKLY;BYDAY=MO,WE,FR;COUNT=5" do
       results =
         create_ical_event(
@@ -162,8 +160,6 @@ defmodule ICalendar.RecurrenceWeeklyTest do
       assert hd(results) == ~U[2025-10-13 07:00:00Z]
     end
 
-    # weekly + byday looks broken
-    @tag :skip
     test "FREQ=WEEKLY;BYDAY=TU,TH;INTERVAL=2" do
       results =
         create_ical_event(
@@ -174,17 +170,6 @@ defmodule ICalendar.RecurrenceWeeklyTest do
           7
         )
 
-      # 2025-10-14T07:00:00
-      # 2025-10-16T07:00:00
-      # 2025-10-28T07:00:00
-      # 2025-10-30T07:00:00
-      # 2025-11-11T07:00:00
-      # 2025-11-13T07:00:00
-      # 2025-11-25T07:00:00
-      # 2025-11-27T07:00:00
-      # 2025-12-09T07:00:00
-      # 2025-12-11T07:00:00
-
       assert results == [
                # Tuesday week 1
                ~U[2025-10-14 07:00:00Z],
@@ -193,9 +178,13 @@ defmodule ICalendar.RecurrenceWeeklyTest do
                # Tuesday week 3 (skip week 2)
                ~U[2025-10-28 07:00:00Z],
                # Thursday week 3
-               ~U[2025-10-30 07:00:00Z]
+               ~U[2025-10-30 07:00:00Z],
                # Tuesday week 5
-               #  ~U[2025-11-11 07:00:00Z]
+               ~U[2025-11-11 07:00:00Z],
+               # Thursday week 5
+               ~U[2025-11-13 07:00:00Z],
+               # Tuesday week 7
+               ~U[2025-11-25 07:00:00Z]
              ]
     end
   end
@@ -220,17 +209,18 @@ defmodule ICalendar.RecurrenceWeeklyTest do
     end
 
     # weekly + wkst looks broken
-    @tag :skip
     test "FREQ=WEEKLY;WKST=SU;BYDAY=SA,SU" do
       results =
         create_ical_event(
           # Sunday
           ~U[2025-10-12 07:00:00Z],
-          "FREQ=WEEKLY;WKST=SU;BYDAY=SA,SU"
+          "FREQ=WEEKLY;WKST=SU;BYDAY=SA,SU",
+          nil,
+          6
         )
 
       # Week starts on Sunday, recurring on Saturday and Sunday
-      assert [
+      assert results == [
                # Sunday (original)
                ~U[2025-10-12 07:00:00Z],
                # Saturday of same week (WKST=SU, so week is 10/12-10/18, Saturday is 10/18)
@@ -243,7 +233,7 @@ defmodule ICalendar.RecurrenceWeeklyTest do
                ~U[2025-10-26 07:00:00Z],
                # Following Saturday
                ~U[2025-11-01 07:00:00Z]
-             ] = results
+             ]
     end
   end
 

@@ -111,7 +111,9 @@ defmodule ICalendar.Recurrence do
         is_date = is_struct(event.dtstart, Date)
         is_naive = is_struct(event.dtstart, NaiveDateTime)
 
-        {freq, opts} = parse_rrule(rrule)
+        {freq, opts} =
+          parse_rrule(rrule)
+          |> IO.inspect(label: "Parsed rrule")
 
         logical_dtstart =
           cond do
@@ -202,17 +204,22 @@ defmodule ICalendar.Recurrence do
     opts =
       if byday = rrule[:byday] do
         weekdays = Enum.map(byday, &parse_byday/1)
-        Keyword.put(opts, :weekdays, weekdays)
+        Keyword.put(opts, :days, weekdays)
       else
         opts
       end
+
+    opts =
+      if bymonthday = rrule[:bymonthday],
+        do: Keyword.put(opts, :days_of_month, Enum.map(bymonthday, &String.to_integer/1)),
+        else: opts
 
     {freq, opts}
   end
 
   defp parse_byday(byday_str) do
     case Regex.run(~r/^(-?\d+)?([A-Z]{2})$/, byday_str, capture: :all_but_first) do
-      [nth, day] when nth != "" and not is_nil(nth) -> {day_to_atom(day), String.to_integer(nth)}
+      [nth, day] when nth != "" and not is_nil(nth) -> {String.to_integer(nth), day_to_atom(day)}
       ["", day] -> day_to_atom(day)
       _ -> nil
     end
@@ -227,14 +234,6 @@ defmodule ICalendar.Recurrence do
       "TH" -> :thursday
       "FR" -> :friday
       "SA" -> :saturday
-    end
-  end
-
-  defp to_datetime(datetime) do
-    case datetime do
-      %Date{} -> NaiveDateTime.new(datetime, ~T[00:00:00]) |> DateTime.from_naive!("Etc/UTC")
-      %NaiveDateTime{} -> DateTime.from_naive!(datetime, "Etc/UTC")
-      %DateTime{} -> datetime
     end
   end
 

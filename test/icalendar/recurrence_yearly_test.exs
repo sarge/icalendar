@@ -2,7 +2,7 @@ defmodule ICalendar.RecurrenceYearlyTest do
   use ExUnit.Case
 
   # test verification via https://kewisch.github.io/ical.js/recur-tester.html
-  def create_ical_event(dtstart, rrule) do
+  def create_ical_event(dtstart, rrule, timezone \\ nil, take \\ 5) do
     start = ICalendar.Value.to_ics(dtstart)
 
     """
@@ -29,7 +29,8 @@ defmodule ICalendar.RecurrenceYearlyTest do
           DateTime.add(dtstart, 365 * 10, :day)
         end
 
-      ICalendar.Recurrence.get_recurrences(event, end_date)
+      ICalendar.Recurrence.get_recurrences(event, end_date, timezone)
+      |> Enum.take(take)
       |> Enum.map(fn r -> r.dtstart end)
     end)
   end
@@ -39,18 +40,19 @@ defmodule ICalendar.RecurrenceYearlyTest do
       results =
         create_ical_event(
           ~U[2025-10-14 07:00:00Z],
-          "FREQ=YEARLY"
+          "FREQ=YEARLY",
+          nil,
+          6
         )
-        |> Enum.take(6)
 
-      assert [
+      assert results == [
                ~U[2025-10-14 07:00:00Z],
                ~U[2026-10-14 07:00:00Z],
                ~U[2027-10-14 07:00:00Z],
                ~U[2028-10-14 07:00:00Z],
                ~U[2029-10-14 07:00:00Z],
                ~U[2030-10-14 07:00:00Z]
-             ] = results
+             ]
     end
 
     test "FREQ=YEARLY;COUNT=5" do
@@ -73,17 +75,19 @@ defmodule ICalendar.RecurrenceYearlyTest do
       results =
         create_ical_event(
           ~U[2025-10-14 07:00:00Z],
-          "FREQ=YEARLY;UNTIL=20301231T000000Z"
+          "FREQ=YEARLY;UNTIL=20301231T000000Z",
+          nil,
+          6
         )
 
-      assert [
+      assert results == [
                ~U[2025-10-14 07:00:00Z],
                ~U[2026-10-14 07:00:00Z],
                ~U[2027-10-14 07:00:00Z],
                ~U[2028-10-14 07:00:00Z],
                ~U[2029-10-14 07:00:00Z],
                ~U[2030-10-14 07:00:00Z]
-             ] = results
+             ]
     end
   end
 
@@ -121,22 +125,23 @@ defmodule ICalendar.RecurrenceYearlyTest do
   end
 
   describe "FREQ=YEARLY - With BYMONTH (partially supported)" do
-    @tag :skip
     test "FREQ=YEARLY;BYMONTH=6" do
       results =
         create_ical_event(
           ~U[2025-06-14 07:00:00Z],
-          "FREQ=YEARLY;BYMONTH=6"
+          "FREQ=YEARLY;BYMONTH=6",
+          nil,
+          6
         )
 
-      assert [
+      assert results == [
                ~U[2025-06-14 07:00:00Z],
                ~U[2026-06-14 07:00:00Z],
                ~U[2027-06-14 07:00:00Z],
                ~U[2028-06-14 07:00:00Z],
                ~U[2029-06-14 07:00:00Z],
                ~U[2030-06-14 07:00:00Z]
-             ] = results
+             ]
     end
 
     @tag :skip
@@ -148,14 +153,15 @@ defmodule ICalendar.RecurrenceYearlyTest do
         )
 
       # Should occur 4 times per year in March, June, September, December
-      assert [
+
+      assert results == [
                ~U[2025-03-14 07:00:00Z],
                ~U[2025-06-14 07:00:00Z],
                ~U[2025-09-14 07:00:00Z],
                ~U[2025-12-14 07:00:00Z],
                ~U[2026-03-14 07:00:00Z],
                ~U[2026-06-14 07:00:00Z]
-             ] = results
+             ]
     end
   end
 

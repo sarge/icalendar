@@ -2,7 +2,7 @@ defmodule ICalendar.RecurrenceDailyTest do
   use ExUnit.Case
 
   # test verification via https://kewisch.github.io/ical.js/recur-tester.html
-  def create_ical_event(dtstart, rrule) do
+  def create_ical_event(dtstart, rrule, timezone \\ nil, take \\ 5) do
     start = ICalendar.Value.to_ics(dtstart)
 
     """
@@ -29,8 +29,8 @@ defmodule ICalendar.RecurrenceDailyTest do
           DateTime.add(dtstart, 365, :day)
         end
 
-      ICalendar.Recurrence.get_recurrences(event, end_date)
-      |> Enum.take(5)
+      ICalendar.Recurrence.get_recurrences(event, end_date, timezone)
+      |> Enum.take(take)
       |> Enum.map(fn r -> r.dtstart end)
     end)
   end
@@ -187,23 +187,24 @@ defmodule ICalendar.RecurrenceDailyTest do
              ] = results
     end
 
-    @tag :skip
     test "FREQ=DAILY;BYMONTHDAY=1,15" do
       results =
         create_ical_event(
           ~U[2025-10-01 00:00:00Z],
-          "FREQ=DAILY;BYMONTHDAY=1,15"
+          "FREQ=DAILY;BYMONTHDAY=1,15",
+          nil,
+          6
         )
 
       # Should only occur on 1st and 15th of each month
-      assert [
+      assert results == [
                ~U[2025-10-01 00:00:00Z],
                ~U[2025-10-15 00:00:00Z],
                ~U[2025-11-01 00:00:00Z],
                ~U[2025-11-15 00:00:00Z],
                ~U[2025-12-01 00:00:00Z],
                ~U[2025-12-15 00:00:00Z]
-             ] = results
+             ]
     end
   end
 
