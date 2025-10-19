@@ -29,12 +29,8 @@ defmodule ICalendar.RecurrenceYearlyTest do
           DateTime.add(dtstart, 365 * 10, :day)
         end
 
-      recurrances =
-        ICalendar.Recurrence.get_recurrences(event, end_date)
-        |> Enum.take(5)
-        |> Enum.map(fn r -> r.dtstart end)
-
-      [event.dtstart | recurrances]
+      ICalendar.Recurrence.get_recurrences(event, end_date)
+      |> Enum.map(fn r -> r.dtstart end)
     end)
   end
 
@@ -45,6 +41,7 @@ defmodule ICalendar.RecurrenceYearlyTest do
           ~U[2025-10-14 07:00:00Z],
           "FREQ=YEARLY"
         )
+        |> Enum.take(6)
 
       assert [
                ~U[2025-10-14 07:00:00Z],
@@ -97,6 +94,7 @@ defmodule ICalendar.RecurrenceYearlyTest do
           ~U[2025-10-14 07:00:00Z],
           "FREQ=YEARLY;INTERVAL=2"
         )
+        |> Enum.take(5)
 
       assert [
                ~U[2025-10-14 07:00:00Z],

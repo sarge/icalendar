@@ -120,7 +120,7 @@ defmodule ICalendar.DeserializeTest do
       assert event.url == "http://google.com"
     end
 
-    # hanging date, returns as DateTime at midnight UTC
+    # floating date, returns a Date
     test "with Date (no time)" do
       ics = """
       BEGIN:VEVENT
@@ -130,12 +130,11 @@ defmodule ICalendar.DeserializeTest do
       """
 
       [event] = ICalendar.from_ics(ics)
-      assert event.dtstart == ~U[2025-11-14 00:00:00Z]
-      assert event.dtend == ~U[2025-11-15 00:00:00Z]
+      assert event.dtstart == ~D[2025-11-14]
+      assert event.dtend == ~D[2025-11-15]
     end
 
-    # hanging date with X-WR-TIMEZONE assume the date is in that timezone
-    # and convert to UTC
+    # hanging date with X-WR-TIMEZONE, will leave the Timezone conversion to a later step
     test "with Date (no time) with X-WR-TIMEZONE" do
       ics = """
       BEGIN:VCALENDAR
@@ -148,8 +147,8 @@ defmodule ICalendar.DeserializeTest do
       """
 
       [event] = ICalendar.from_ics(ics)
-      assert event.dtstart == ~U[2025-11-13 11:00:00Z]
-      assert event.dtend == ~U[2025-11-14 11:00:00Z]
+      assert event.dtstart == ~D[2025-11-14]
+      assert event.dtend == ~D[2025-11-15]
     end
 
     test "with DateTime (UTC) with X-WR-TIMEZONE, the X-WR-TIMEZONE should be ignored" do
@@ -213,12 +212,13 @@ defmodule ICalendar.DeserializeTest do
       """
 
       [event] = ICalendar.from_ics(ics)
-      assert event.dtstart == ~U[2025-11-14 00:00:00Z]
-      assert event.dtend == ~U[2025-11-15 00:00:00Z]
+      assert event.dtstart == ~D[2025-11-14]
+      assert event.dtend == ~D[2025-11-15]
       assert event.rrule.freq == "DAILY"
       assert event.rrule.count == 3
     end
 
+    # TODO: review handling of X-WR-TIMEZONE
     test "recurring event with Date (no time) values and X-WR-TIMEZONE" do
       ics = """
       BEGIN:VCALENDAR
@@ -235,8 +235,8 @@ defmodule ICalendar.DeserializeTest do
       [event] = ICalendar.from_ics(ics)
       # Date should be interpreted as midnight in Pacific/Auckland and converted to UTC
       # November 2025: Pacific/Auckland is UTC+13 (daylight saving time)
-      assert event.dtstart == ~U[2025-11-13 11:00:00Z]
-      assert event.dtend == ~U[2025-11-14 11:00:00Z]
+      assert event.dtstart == ~D[2025-11-14]
+      assert event.dtend == ~D[2025-11-15]
       assert event.rrule.freq == "WEEKLY"
       assert event.rrule.count == 2
     end
@@ -252,8 +252,8 @@ defmodule ICalendar.DeserializeTest do
       """
 
       [event] = ICalendar.from_ics(ics)
-      assert event.dtstart == ~U[2025-11-14 00:00:00Z]
-      assert event.dtend == ~U[2025-11-15 00:00:00Z]
+      assert event.dtstart == ~D[2025-11-14]
+      assert event.dtend == ~D[2025-11-15]
       assert event.rrule.freq == "DAILY"
       # UNTIL should be parsed as a date (converted to DateTime at end of day)
       assert event.rrule.until == ~U[2025-11-17 00:00:00Z]
@@ -271,12 +271,12 @@ defmodule ICalendar.DeserializeTest do
       """
 
       [event] = ICalendar.from_ics(ics)
-      assert event.dtstart == ~U[2025-11-14 00:00:00Z]
-      assert event.dtend == ~U[2025-11-15 00:00:00Z]
+      assert event.dtstart == ~D[2025-11-14]
+      assert event.dtend == ~D[2025-11-15]
       assert event.rrule.freq == "DAILY"
       assert event.rrule.count == 5
       # EXDATE should be parsed as date (midnight UTC)
-      assert event.exdates == [~U[2025-11-16 00:00:00Z]]
+      assert event.exdates == [~D[2025-11-16]]
     end
 
     test "recurring event with Date (no time) values, EXDATE and X-WR-TIMEZONE" do
@@ -295,12 +295,12 @@ defmodule ICalendar.DeserializeTest do
 
       [event] = ICalendar.from_ics(ics)
       # Dates should be interpreted as midnight in Pacific/Auckland and converted to UTC
-      assert event.dtstart == ~U[2025-11-13 11:00:00Z]
-      assert event.dtend == ~U[2025-11-14 11:00:00Z]
+      assert event.dtstart == ~D[2025-11-14]
+      assert event.dtend == ~D[2025-11-15]
       assert event.rrule.freq == "DAILY"
       assert event.rrule.count == 5
       # EXDATE should also be interpreted in the timezone and converted to UTC
-      assert event.exdates == [~U[2025-11-15 11:00:00Z]]
+      assert event.exdates == [~D[2025-11-16]]
     end
   end
 end

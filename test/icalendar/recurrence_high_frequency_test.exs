@@ -29,13 +29,10 @@ defmodule ICalendar.RecurrenceHighFrequencyTest do
           DateTime.add(dtstart, 365, :day)
         end
 
-      recurrances =
-        ICalendar.Recurrence.get_recurrences(event, end_date)
-        # Take more for high frequency events
-        |> Enum.take(10)
-        |> Enum.map(fn r -> r.dtstart end)
-
-      [event.dtstart | recurrances]
+      ICalendar.Recurrence.get_recurrences(event, end_date)
+      # Take more for high frequency events
+      |> Enum.take(10)
+      |> Enum.map(fn r -> r.dtstart end)
     end)
   end
 
@@ -52,9 +49,8 @@ defmodule ICalendar.RecurrenceHighFrequencyTest do
                ~U[2025-10-17 10:00:00Z],
                ~U[2025-10-17 11:00:00Z],
                ~U[2025-10-17 12:00:00Z],
-               ~U[2025-10-17 13:00:00Z],
-               ~U[2025-10-17 14:00:00Z]
-             ] = Enum.take(results, 6)
+               ~U[2025-10-17 13:00:00Z]
+             ] = Enum.take(results, 5)
     end
 
     @tag :skip

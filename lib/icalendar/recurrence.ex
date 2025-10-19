@@ -96,14 +96,34 @@ defmodule ICalendar.Recurrence do
   """
   @spec get_recurrences(%Event{}) :: [%Event{}]
   @spec get_recurrences(%Event{}, %DateTime{}) :: [%Event{}]
-  def get_recurrences(event, end_date \\ DateTime.utc_now()) do
+  def get_recurrences(event, %DateTime{} = end_date \\ DateTime.utc_now(), user_timezone \\ nil) do
+    # timezone fallback
+    calendar_timezone =
+      event.x_wr_timezone ||
+        user_timezone ||
+        "Etc/UTC"
+
     case event.rrule do
       nil ->
         []
 
       rrule ->
+        is_date = is_struct(event.dtstart, Date)
+        is_naive = is_struct(event.dtstart, NaiveDateTime)
+
         {freq, opts} = parse_rrule(rrule)
-        logical_dtstart = get_logical_datetime(event)
+
+        logical_dtstart =
+          cond do
+            is_date ->
+              event.dtstart
+
+            is_naive ->
+              event.dtstart
+
+            true ->
+              get_logical_datetime(event)
+          end
 
         cycle =
           ExCycle.new()
@@ -113,33 +133,40 @@ defmodule ICalendar.Recurrence do
           cond do
             count = rrule[:count] ->
               ExCycle.occurrences(cycle, logical_dtstart)
-              |> Stream.map(&to_utc/1)
+              |> Stream.map(&to_timezone(&1, calendar_timezone))
               |> Stream.take(count)
               |> Enum.to_list()
 
             until = rrule[:until] ->
+              until_dt = to_timezone(until, calendar_timezone)
+
               ExCycle.occurrences(cycle, logical_dtstart)
-              |> Stream.map(&to_utc/1)
-              |> Stream.take_while(fn dt -> DateTime.compare(dt, to_utc(until)) != :gt end)
+              |> Stream.map(&to_timezone(&1, calendar_timezone))
+              |> Stream.take_while(fn dt -> DateTime.compare(dt, until_dt) != :gt end)
               |> Enum.to_list()
 
             true ->
               # iterate until the end date
               ExCycle.occurrences(cycle, logical_dtstart)
-              |> Stream.map(&to_utc/1)
+              |> Stream.map(&to_timezone(&1, calendar_timezone))
               |> Stream.take_while(&(DateTime.compare(&1, end_date) != :gt))
               |> Enum.to_list()
           end
 
         # check if the dtstart is included in the recurrences adding it if it's missing
-        occurrences = if DateTime.compare(Enum.at(occurrences, 0), event.dtstart) == :eq do
-          occurrences
-        else
-          [event.dtstart | occurrences]
-        end
+        occurrences =
+          if occurrences != [] &&
+               DateTime.compare(
+                 Enum.at(occurrences, 0),
+                 to_timezone(event.dtstart, calendar_timezone)
+               ) == :eq do
+            occurrences
+          else
+            [to_timezone(event.dtstart, calendar_timezone) | occurrences]
+          end
 
         occurrences
-        |> Enum.map(&map_to_event(event, &1, logical_dtstart))
+        |> Enum.map(&map_to_event(event, &1, calendar_timezone))
         |> remove_excluded_dates(event)
     end
   end
@@ -186,7 +213,7 @@ defmodule ICalendar.Recurrence do
   defp parse_byday(byday_str) do
     case Regex.run(~r/^(-?\d+)?([A-Z]{2})$/, byday_str, capture: :all_but_first) do
       [nth, day] when nth != "" and not is_nil(nth) -> {day_to_atom(day), String.to_integer(nth)}
-      [nil, day] -> day_to_atom(day)
+      ["", day] -> day_to_atom(day)
       _ -> nil
     end
   end
@@ -203,19 +230,49 @@ defmodule ICalendar.Recurrence do
     end
   end
 
-  defp to_utc(datetime) do
+  defp to_datetime(datetime) do
     case datetime do
+      %Date{} -> NaiveDateTime.new(datetime, ~T[00:00:00]) |> DateTime.from_naive!("Etc/UTC")
       %NaiveDateTime{} -> DateTime.from_naive!(datetime, "Etc/UTC")
       %DateTime{} -> datetime
     end
   end
 
-  defp map_to_event(original_event, new_dtstart, logical_dtstart) do
-    duration = DateTime.diff(original_event.dtend, original_event.dtstart, :second)
-    offset = DateTime.diff(original_event.dtstart, logical_dtstart, :second)
+  defp to_timezone(datetime, timezone) do
+    case datetime do
+      %NaiveDateTime{} ->
+        DateTime.from_naive!(datetime, timezone)
 
-    final_dtstart = DateTime.add(new_dtstart, offset, :second)
-    final_dtend = DateTime.add(final_dtstart, duration, :second)
+      %DateTime{} ->
+        datetime
+
+      %Date{} ->
+        # TODO: should be the start of the day in that timezone
+        DateTime.from_naive!(
+          NaiveDateTime.new(datetime, ~T[00:00:00]) |> elem(1),
+          timezone
+        )
+    end
+  end
+
+  defp map_to_event(original_event, new_dtstart, calendar_timezone) do
+    duration =
+      cond do
+        true ->
+          DateTime.diff(
+            to_timezone(original_event.dtend, calendar_timezone),
+            to_timezone(original_event.dtstart, calendar_timezone),
+            :second
+          )
+      end
+
+    final_dtstart = to_timezone(new_dtstart, calendar_timezone)
+
+    final_dtend =
+      cond do
+        true ->
+          DateTime.add(final_dtstart, duration, :second)
+      end
 
     %{
       original_event

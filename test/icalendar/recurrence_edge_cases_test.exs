@@ -29,12 +29,9 @@ defmodule ICalendar.RecurrenceEdgeCasesTest do
           DateTime.add(dtstart, 365, :day)
         end
 
-      recurrances =
-        ICalendar.Recurrence.get_recurrences(event, end_date)
-        |> Enum.take(5)
-        |> Enum.map(fn r -> r.dtstart end)
-
-      [event.dtstart | recurrances]
+      ICalendar.Recurrence.get_recurrences(event, end_date)
+      |> Enum.take(5)
+      |> Enum.map(fn r -> r.dtstart end)
     end)
   end
 

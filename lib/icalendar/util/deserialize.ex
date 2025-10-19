@@ -245,25 +245,11 @@ defmodule ICalendar.Util.Deserialize do
     to_date(date_string, %{"TZID" => timezone})
   end
 
-  def to_date(date_string, %{"VALUE" => "DATE"}, x_wr_timezone) when is_binary(x_wr_timezone) do
-    # When we have a date (no time) and X-WR-TIMEZONE, treat as midnight in that timezone
-    # and convert to UTC
-    case Timex.parse(date_string, "{YYYY}{0M}{0D}") do
-      {:ok, naive_date} ->
-        # Create a datetime at midnight in the specified timezone
-        midnight_datetime = Timex.to_datetime(naive_date, x_wr_timezone)
-        # Convert to UTC
-        utc_datetime = Timex.to_datetime(midnight_datetime, "UTC")
-        {:ok, utc_datetime}
-
-      error ->
-        error
-    end
-  end
-
   def to_date(date_string, %{"VALUE" => "DATE"}, _x_wr_timezone) do
-    # No X-WR-TIMEZONE or it's nil, use default behavior (midnight UTC)
-    to_date(date_string <> "T000000Z")
+    case Timex.parse(date_string, "{YYYY}{0M}{0D}") do
+      {:ok, date} -> {:ok, Timex.to_date(date)}
+      error -> error
+    end
   end
 
   def to_date(date_string, params, x_wr_timezone) when is_binary(x_wr_timezone) do
@@ -313,10 +299,16 @@ defmodule ICalendar.Util.Deserialize do
   end
 
   def to_date(date_string, %{"VALUE" => "DATE"}) do
-    to_date(date_string <> "T000000Z")
+    Timex.parse(date_string, "{YYYY}{0M}{0D}")
   end
 
   def to_date(date_string, %{}) do
+    date_string =
+      case String.last(date_string) do
+        "Z" -> date_string
+        _ -> date_string <> "Z"
+      end
+
     to_date(date_string, %{"TZID" => "Etc/UTC"})
   end
 
