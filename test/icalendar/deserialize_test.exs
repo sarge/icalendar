@@ -32,6 +32,7 @@ defmodule ICalendar.DeserializeTest do
                categories: ["Fishing", "Nature"],
                comment: "Don't forget to take something to eat !",
                class: "private",
+               rrule_str: "DTSTART:20151224T083000Z",
                geo: {43.6978819, -79.3810277}
              }
     end
@@ -68,6 +69,7 @@ defmodule ICalendar.DeserializeTest do
                categories: ["Fishing", "Nature"],
                comment: "Don't forget to take something to eat !",
                class: "private",
+               rrule_str: "DTSTART:20151224T083000Z",
                geo: {43.6978819, -79.3810277}
              }
     end

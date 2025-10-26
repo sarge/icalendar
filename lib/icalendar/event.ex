@@ -7,6 +7,7 @@ defmodule ICalendar.Event do
             dtstart: nil,
             dtend: nil,
             rrule: nil,
+            rrule_str: nil,
             exdates: [],
             description: nil,
             location: nil,

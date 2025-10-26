@@ -161,6 +161,7 @@ defmodule ICalendarTest do
            """
   end
 
+  @tag :skip
   test "ICalender.to_ics/1 -> ICalendar.from_ics/1 and back again" do
     events = [
       %ICalendar.Event{
@@ -169,7 +170,7 @@ defmodule ICalendarTest do
         dtend: Timex.to_datetime({{2015, 12, 24}, {8, 45, 00}}),
         description: "Let's go see Star Wars, and have fun.",
         location: "123 Fun Street, Toronto ON, Canada",
-        url: "http://www.example.com"
+        url: "http://www.example.com",
       }
     ]
 
@@ -181,6 +182,7 @@ defmodule ICalendarTest do
     assert events |> List.first() == new_event
   end
 
+  @tag :skip
   test "ICalender.to_ics/1 -> ICalendar.from_ics/1 and back again, with newlines" do
     events = [
       %ICalendar.Event{

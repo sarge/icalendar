@@ -2,7 +2,13 @@ defmodule ICalendar.RecurrenceFloatingDateTimeTest do
   use ExUnit.Case
 
   # test verification via https://kewisch.github.io/ical.js/recur-tester.html
-  def create_ical_event(%NaiveDateTime{} = dtstart, rrule, timezone \\ nil) do
+  def create_ical_event(
+        %NaiveDateTime{} = dtstart,
+        %DateTime{} = start_date,
+        %DateTime{} = end_date,
+        rrule,
+        timezone \\ nil
+      ) do
     start = ICalendar.Value.to_ics(dtstart)
 
     """
@@ -19,23 +25,7 @@ defmodule ICalendar.RecurrenceFloatingDateTimeTest do
     """
     |> ICalendar.from_ics()
     |> Enum.flat_map(fn event ->
-      # For infinite recurrence (no COUNT or UNTIL), provide an end date
-      # that's far enough in the future to generate the expected test results
-      end_date =
-        if String.contains?(rrule, "COUNT") or String.contains?(rrule, "UNTIL") do
-          DateTime.utc_now()
-        else
-          # For infinite recurrence, set end date 1 year from start
-          to =
-            DateTime.from_naive!(
-              dtstart,
-              timezone || "Etc/UTC"
-            )
-
-          DateTime.add(to, 365, :day)
-        end
-
-      ICalendar.Recurrence.get_recurrences(event, end_date, timezone)
+      ICalendar.Recurrence.get_recurrences(event, start_date, end_date, timezone)
       |> Enum.take(5)
       |> Enum.map(fn r -> r.dtstart end)
     end)
@@ -46,6 +36,8 @@ defmodule ICalendar.RecurrenceFloatingDateTimeTest do
       results =
         create_ical_event(
           ~N[2025-10-17 14:30:00],
+          ~U[2025-10-17 00:00:00Z],
+          ~U[2025-11-17 00:00:00Z],
           "FREQ=DAILY"
         )
 
@@ -62,6 +54,8 @@ defmodule ICalendar.RecurrenceFloatingDateTimeTest do
       results =
         create_ical_event(
           ~N[2025-10-17 14:30:00],
+          ~U[2025-10-17 00:00:00Z],
+          ~U[2025-11-17 00:00:00Z],
           "FREQ=DAILY;COUNT=5"
         )
 
@@ -78,6 +72,8 @@ defmodule ICalendar.RecurrenceFloatingDateTimeTest do
       results =
         create_ical_event(
           ~N[2025-10-17 14:30:00],
+          ~U[2025-10-17 00:00:00Z],
+          ~U[2025-11-17 00:00:00Z],
           "FREQ=DAILY;UNTIL=20251231T143000"
         )
 
@@ -96,6 +92,8 @@ defmodule ICalendar.RecurrenceFloatingDateTimeTest do
       results =
         create_ical_event(
           ~N[2025-10-17 14:30:00],
+          ~U[2025-10-17 00:00:00Z],
+          ~U[2025-11-17 00:00:00Z],
           "FREQ=DAILY;INTERVAL=2"
         )
 
@@ -112,6 +110,8 @@ defmodule ICalendar.RecurrenceFloatingDateTimeTest do
       results =
         create_ical_event(
           ~N[2025-10-17 14:30:00],
+          ~U[2025-10-17 00:00:00Z],
+          ~U[2025-11-17 00:00:00Z],
           "FREQ=DAILY;INTERVAL=2;COUNT=10"
         )
 
@@ -128,6 +128,8 @@ defmodule ICalendar.RecurrenceFloatingDateTimeTest do
       results =
         create_ical_event(
           ~N[2025-10-17 14:30:00],
+          ~U[2025-10-17 00:00:00Z],
+          ~U[2025-11-17 00:00:00Z],
           "FREQ=DAILY;INTERVAL=3;UNTIL=20251031T143000"
         )
 
@@ -146,6 +148,8 @@ defmodule ICalendar.RecurrenceFloatingDateTimeTest do
       results =
         create_ical_event(
           ~N[2025-10-17 14:30:00],
+          ~U[2025-10-17 00:00:00Z],
+          ~U[2025-11-17 00:00:00Z],
           "FREQ=DAILY;COUNT=1"
         )
 

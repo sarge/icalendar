@@ -10,31 +10,6 @@ defmodule ICalendar.Recurrence do
 
   alias ICalendar.Event
 
-  # Helper to get the logical start time for recurrence calculations,
-  # which is important for date-only events that have been converted to UTC
-  # from a different timezone.
-  defp get_logical_datetime(event) do
-    case event.x_wr_timezone do
-      nil ->
-        event.dtstart
-
-      timezone when is_binary(timezone) ->
-        if is_likely_converted_date_only_value?(event.dtstart, timezone) do
-          original_datetime = Timex.to_datetime(event.dtstart, timezone)
-          original_date = Timex.to_date(original_datetime)
-          DateTime.from_naive!(Timex.to_naive_datetime(original_date), "Etc/UTC")
-        else
-          event.dtstart
-        end
-    end
-  end
-
-  # Heuristic to detect if a datetime is likely a converted date-only value.
-  defp is_likely_converted_date_only_value?(datetime, timezone) do
-    timezone_dt = Timex.to_datetime(datetime, timezone)
-    timezone_dt.hour == 0 and timezone_dt.minute == 0 and timezone_dt.second == 0
-  end
-
   @doc """
   Given an event, return a list of recurrences for that event.
 
@@ -94,146 +69,45 @@ defmodule ICalendar.Recurrence do
             |> Enum.to_list()
 
   """
-  @spec get_recurrences(%Event{}) :: [%Event{}]
-  @spec get_recurrences(%Event{}, %DateTime{}) :: [%Event{}]
-  def get_recurrences(event, %DateTime{} = end_date \\ DateTime.utc_now(), user_timezone \\ nil) do
+  @spec get_recurrences(%Event{}, %DateTime{}, %DateTime{}) :: [%Event{}]
+  def get_recurrences(
+        event,
+        %DateTime{} = start_date,
+        %DateTime{} = end_date \\ DateTime.utc_now(),
+        user_timezone \\ nil
+      ) do
     # timezone fallback
     calendar_timezone =
       event.x_wr_timezone ||
         user_timezone ||
         "Etc/UTC"
 
-    case event.rrule do
+    case event.rrule_str do
       nil ->
         []
 
       rrule ->
-        is_date = is_struct(event.dtstart, Date)
-        is_naive = is_struct(event.dtstart, NaiveDateTime)
+        {:ok, {occurrences, _has_more}} =
+          RRule.all_between(
+            rrule,
+            start_date,
+            end_date
+          )
 
-        {freq, opts} =
-          parse_rrule(rrule)
-          |> IO.inspect(label: "Parsed rrule")
-
-        logical_dtstart =
-          cond do
-            is_date ->
-              event.dtstart
-
-            is_naive ->
-              event.dtstart
-
-            true ->
-              get_logical_datetime(event)
-          end
-
-        cycle =
-          ExCycle.new()
-          |> ExCycle.add_rule(freq, opts)
-
-        occurrences =
-          cond do
-            count = rrule[:count] ->
-              ExCycle.occurrences(cycle, logical_dtstart)
-              |> Stream.map(&to_timezone(&1, calendar_timezone))
-              |> Stream.take(count)
-              |> Enum.to_list()
-
-            until = rrule[:until] ->
-              until_dt = to_timezone(until, calendar_timezone)
-
-              ExCycle.occurrences(cycle, logical_dtstart)
-              |> Stream.map(&to_timezone(&1, calendar_timezone))
-              |> Stream.take_while(fn dt -> DateTime.compare(dt, until_dt) != :gt end)
-              |> Enum.to_list()
-
-            true ->
-              # iterate until the end date
-              ExCycle.occurrences(cycle, logical_dtstart)
-              |> Stream.map(&to_timezone(&1, calendar_timezone))
-              |> Stream.take_while(&(DateTime.compare(&1, end_date) != :gt))
-              |> Enum.to_list()
-          end
-
-        # check if the dtstart is included in the recurrences adding it if it's missing
-        occurrences =
-          if occurrences != [] &&
-               DateTime.compare(
-                 Enum.at(occurrences, 0),
-                 to_timezone(event.dtstart, calendar_timezone)
-               ) == :eq do
-            occurrences
-          else
-            [to_timezone(event.dtstart, calendar_timezone) | occurrences]
-          end
+        # occurrences =
+        #   if occurrences != [] &&
+        #          DateTime.compare(
+        #            Enum.at(occurrences, 0),
+        #            to_timezone(event.dtstart, calendar_timezone)
+        #          ) == :eq do
+        #       occurrences
+        #     else
+        #       [to_timezone(event.dtstart, calendar_timezone) | occurrences]
+        #     end
 
         occurrences
+        |> Stream.map(&to_timezone(&1, calendar_timezone))
         |> Enum.map(&map_to_event(event, &1, calendar_timezone))
-        |> remove_excluded_dates(event)
-    end
-  end
-
-  defp parse_rrule(rrule) do
-    freq = rrule[:freq] |> String.downcase() |> String.to_atom()
-
-    opts = []
-    opts = if interval = rrule[:interval], do: Keyword.put(opts, :interval, interval), else: opts
-
-    opts =
-      if wkst = rrule[:wkst],
-        do: Keyword.put(opts, :week_start, wkst |> String.downcase() |> String.to_atom()),
-        else: opts
-
-    opts =
-      if bymonth = rrule[:bymonth],
-        do: Keyword.put(opts, :months, Enum.map(bymonth, &String.to_integer/1)),
-        else: opts
-
-    opts =
-      if byhour = rrule[:byhour],
-        do: Keyword.put(opts, :hours, Enum.map(byhour, &String.to_integer/1)),
-        else: opts
-
-    opts =
-      if byminute = rrule[:byminute],
-        do: Keyword.put(opts, :minutes, Enum.map(byminute, &String.to_integer/1)),
-        else: opts
-
-    opts = if bysetpos = rrule[:bysetpos], do: Keyword.put(opts, :setpos, bysetpos), else: opts
-
-    opts =
-      if byday = rrule[:byday] do
-        weekdays = Enum.map(byday, &parse_byday/1)
-        Keyword.put(opts, :days, weekdays)
-      else
-        opts
-      end
-
-    opts =
-      if bymonthday = rrule[:bymonthday],
-        do: Keyword.put(opts, :days_of_month, Enum.map(bymonthday, &String.to_integer/1)),
-        else: opts
-
-    {freq, opts}
-  end
-
-  defp parse_byday(byday_str) do
-    case Regex.run(~r/^(-?\d+)?([A-Z]{2})$/, byday_str, capture: :all_but_first) do
-      [nth, day] when nth != "" and not is_nil(nth) -> {String.to_integer(nth), day_to_atom(day)}
-      ["", day] -> day_to_atom(day)
-      _ -> nil
-    end
-  end
-
-  defp day_to_atom(day_str) do
-    case day_str do
-      "SU" -> :sunday
-      "MO" -> :monday
-      "TU" -> :tuesday
-      "WE" -> :wednesday
-      "TH" -> :thursday
-      "FR" -> :friday
-      "SA" -> :saturday
     end
   end
 
@@ -243,9 +117,10 @@ defmodule ICalendar.Recurrence do
         DateTime.from_naive!(datetime, timezone)
 
       %DateTime{} ->
-        datetime
+        datetime |> DateTime.shift_zone!(timezone)
 
       %Date{} ->
+        # When a date is converted it will use the hour offset from
         # TODO: should be the start of the day in that timezone
         DateTime.from_naive!(
           NaiveDateTime.new(datetime, ~T[00:00:00]) |> elem(1),
@@ -277,7 +152,7 @@ defmodule ICalendar.Recurrence do
       original_event
       | dtstart: final_dtstart,
         dtend: final_dtend,
-        rrule: Map.put(original_event.rrule, :is_recurrence, true)
+        rrule: original_event.rrule
     }
   end
 

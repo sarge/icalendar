@@ -19,13 +19,13 @@ defmodule ICalendar.Mixfile do
   end
 
   def application do
-    [applications: [:timex, :ex_cycle]]
+    [applications: [:timex, :rrule_ext]]
   end
 
   defp deps do
     [
       {:timex, "~> 3.4"},
-      {:ex_cycle, "~> 0.8.2", only: [:dev, :test]},
+      {:rrule_ext, "~> 0.15.5"},
       {:mix_test_watch, ">= 0.0.0", only: :dev},
       {:ex_doc, ">= 0.0.0", only: [:dev, :test], runtime: false}
     ]

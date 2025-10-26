@@ -2,7 +2,7 @@ defmodule ICalendar.RecurrenceWeeklyTest do
   use ExUnit.Case
 
   # test verification via https://kewisch.github.io/ical.js/recur-tester.html
-  def create_ical_event(dtstart, rrule, timezone \\ nil, take \\ 5) do
+  def create_ical_event(%DateTime{} = dtstart, rrule, timezone \\ nil, take \\ 5) do
     start = ICalendar.Value.to_ics(dtstart)
 
     """
@@ -21,15 +21,16 @@ defmodule ICalendar.RecurrenceWeeklyTest do
     |> Enum.flat_map(fn event ->
       # For infinite recurrence (no COUNT or UNTIL), provide an end date
       # that's far enough in the future to generate the expected test results
+      # if String.contains?(rrule, "COUNT") or String.contains?(rrule, "UNTIL") do
+      #   DateTime.utc_now()
+      # else
+      # For infinite recurrence, set end date 1 year from start
       end_date =
-        if String.contains?(rrule, "COUNT") or String.contains?(rrule, "UNTIL") do
-          DateTime.utc_now()
-        else
-          # For infinite recurrence, set end date 1 year from start
-          DateTime.add(dtstart, 365, :day)
-        end
+        DateTime.add(dtstart, 365, :day)
 
-      ICalendar.Recurrence.get_recurrences(event, end_date, timezone)
+      # end
+
+      ICalendar.Recurrence.get_recurrences(event, dtstart, end_date, timezone)
       |> Enum.take(take)
       |> Enum.map(fn r -> r.dtstart end)
     end)
@@ -268,17 +269,56 @@ defmodule ICalendar.RecurrenceWeeklyTest do
       results =
         create_ical_event(
           ~U[2025-10-14 07:00:00Z],
-          "FREQ=WEEKLY;BYHOUR=9,17"
+          "FREQ=WEEKLY;BYHOUR=9,17;X-INCLUDE-DTSTART=TRUE"
         )
 
       # Should create 2 events per week at 9 and 17 hours
-      assert [
+      assert results == [
                ~U[2025-10-14 07:00:00Z],
                ~U[2025-10-14 09:00:00Z],
                ~U[2025-10-14 17:00:00Z],
                ~U[2025-10-21 09:00:00Z],
                ~U[2025-10-21 17:00:00Z]
-             ] = results
+             ]
+    end
+  end
+
+  describe "rrule date tests" do
+    test "UTC Time" do
+      {:ok, {occurrances, _has_more}} =
+        RRule.all_between(
+          "RRULE:FREQ=WEEKLY;INTERVAL=2\nDTSTART:20251014T070000Z",
+          ~U[2025-10-14 07:00:00Z],
+          ~U[2025-12-14 07:00:00Z]
+        )
+
+      assert occurrances == [
+               ~U[2025-10-14 07:00:00Z],
+               ~U[2025-10-28 07:00:00Z],
+               ~U[2025-11-11 07:00:00Z],
+               ~U[2025-11-25 07:00:00Z],
+               ~U[2025-12-09 07:00:00Z]
+             ]
+    end
+
+    test "Non-UTC Time" do
+      {:ok, {occurrances, _has_more}} =
+        RRule.all_between(
+          "RRULE:FREQ=WEEKLY;INTERVAL=2\nDTSTART;TZID=America/New_York:20251014T070000",
+          ~U[2025-10-14 07:00:00Z],
+          ~U[2025-12-14 07:00:00Z]
+        )
+
+      #  DTSTART;VALUE=DATE:20251114
+      # DTSTART;TZID=Greenwich Standard Time:20190726T190000
+      # ;TZID=America/Chicago:22221224T083000
+      assert occurrances == [
+               ~U[2025-10-14 11:00:00Z],
+               ~U[2025-10-28 11:00:00Z],
+               ~U[2025-11-11 12:00:00Z],
+               ~U[2025-11-25 12:00:00Z],
+               ~U[2025-12-09 12:00:00Z]
+             ]
     end
   end
 end

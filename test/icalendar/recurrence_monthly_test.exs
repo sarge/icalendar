@@ -2,7 +2,7 @@ defmodule ICalendar.RecurrenceMonthlyTest do
   use ExUnit.Case
 
   # test verification via https://kewisch.github.io/ical.js/recur-tester.html
-  def create_ical_event(dtstart, rrule, timezone \\ nil, take \\ 5) do
+  def create_ical_event(%DateTime{} = dtstart, rrule, timezone \\ nil, take \\ 5) do
     start = ICalendar.Value.to_ics(dtstart)
 
     """
@@ -21,15 +21,9 @@ defmodule ICalendar.RecurrenceMonthlyTest do
     |> Enum.flat_map(fn event ->
       # For infinite recurrence (no COUNT or UNTIL), provide an end date
       # that's far enough in the future to generate the expected test results
-      end_date =
-        if String.contains?(rrule, "COUNT") or String.contains?(rrule, "UNTIL") do
-          DateTime.utc_now()
-        else
-          # For infinite recurrence, set end date 1 year from start
-          DateTime.add(dtstart, 365, :day)
-        end
+      end_date = DateTime.add(dtstart, 2 * 365, :day)
 
-      ICalendar.Recurrence.get_recurrences(event, end_date, timezone)
+      ICalendar.Recurrence.get_recurrences(event, dtstart, end_date, timezone)
       |> Enum.take(take)
       |> Enum.map(fn r -> r.dtstart end)
     end)
@@ -184,7 +178,7 @@ defmodule ICalendar.RecurrenceMonthlyTest do
         create_ical_event(
           # Last Friday of October 2025
           ~U[2025-10-25 07:00:00Z],
-          "FREQ=MONTHLY;BYDAY=-1FR;COUNT=5"
+          "FREQ=MONTHLY;BYDAY=-1FR;COUNT=5;X-INCLUDE-DTSTART=TRUE"
         )
 
       assert results == [
@@ -280,8 +274,6 @@ defmodule ICalendar.RecurrenceMonthlyTest do
   end
 
   describe "FREQ=MONTHLY - BYSETPOS" do
-    # broken bysetpos is not supported
-    @tag :skip
     test "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=1" do
       results =
         create_ical_event(
@@ -301,24 +293,22 @@ defmodule ICalendar.RecurrenceMonthlyTest do
                # Jan 1 (Thu)
                ~U[2026-01-01 07:00:00Z],
                # Feb 2 (Mon) - Feb 1 is Sun
-               ~U[2026-02-02 07:00:00Z],
-               # Mar 2 (Mon) - Mar 1 is Sun
-               ~U[2026-03-02 07:00:00Z]
+               ~U[2026-02-02 07:00:00Z]
              ]
     end
 
-    # confirmed broken
-    @tag :skip
     test "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1" do
       results =
         create_ical_event(
           # Last weekday of October (Thu)
           ~U[2025-10-31 07:00:00Z],
-          "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1"
+          "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1",
+          nil,
+          6
         )
 
       # Should be last weekday of each month
-      assert [
+      assert results == [
                # Oct 31 (Thu)
                ~U[2025-10-31 07:00:00Z],
                # Nov 28 (Fri)
@@ -331,16 +321,17 @@ defmodule ICalendar.RecurrenceMonthlyTest do
                ~U[2026-02-27 07:00:00Z],
                # Mar 31 (Tue)
                ~U[2026-03-31 07:00:00Z]
-             ] = results
+             ]
     end
 
-    @tag :skip
     test "FREQ=MONTHLY;BYDAY=SA,SU;BYSETPOS=1" do
       results =
         create_ical_event(
           # First weekend day of October (Sat)
           ~U[2025-10-04 07:00:00Z],
-          "FREQ=MONTHLY;BYDAY=SA,SU;BYSETPOS=1"
+          "FREQ=MONTHLY;BYDAY=SA,SU;BYSETPOS=1",
+          nil,
+          6
         )
 
       # Should be first weekend day of each month
@@ -360,17 +351,18 @@ defmodule ICalendar.RecurrenceMonthlyTest do
              ]
     end
 
-    @tag :skip
     test "FREQ=MONTHLY;BYDAY=SA,SU;BYSETPOS=-1" do
       results =
         create_ical_event(
           # Last weekend day of October (Sun)
           ~U[2025-10-26 07:00:00Z],
-          "FREQ=MONTHLY;BYDAY=SA,SU;BYSETPOS=-1"
+          "FREQ=MONTHLY;BYDAY=SA,SU;BYSETPOS=-1",
+          nil,
+          6
         )
 
       # Should be last weekend day of each month
-      assert [
+      assert results == [
                # Oct 26 (Sun)
                ~U[2025-10-26 07:00:00Z],
                # Nov 30 (Sun)
@@ -383,7 +375,7 @@ defmodule ICalendar.RecurrenceMonthlyTest do
                ~U[2026-02-28 07:00:00Z],
                # Mar 29 (Sun)
                ~U[2026-03-29 07:00:00Z]
-             ] = results
+             ]
     end
   end
 
