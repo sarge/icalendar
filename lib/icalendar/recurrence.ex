@@ -10,11 +10,8 @@ defmodule ICalendar.Recurrence do
 
   alias ICalendar.Event
 
-  # ignore :byhour, :monthday, :byyearday, :byweekno, :bymonth for now
-  @supported_by_x_rrules [:byday]
-
   @doc """
-  Given an event, return a stream of recurrences for that event.
+  Given an event, return a list of recurrences for that event.
 
   Warning: this may create a very large sequence of event recurrences.
 
@@ -49,6 +46,7 @@ defmodule ICalendar.Recurrence do
       This takes precedence over the `end_date` parameter.
 
     - `byday` *(optional)*: Represents the days of the week at which events occur.
+    - `bymonth` *(optional)*: Represents the months at which events occur.
 
     The `freq` option is required for a valid rrule, but the others are
     optional. They may be used either individually (ex. just `freq`) or in
@@ -59,7 +57,6 @@ defmodule ICalendar.Recurrence do
     - `byhour` *(optional)*: Represents the hours of the day at which events occur.
     - `byweekno` *(optional)*: Represents the week number at which events occur.
     - `bymonthday` *(optional)*: Represents the days of the month at which events occur.
-    - `bymonth` *(optional)*: Represents the months at which events occur.
     - `byyearday` *(optional)*: Represents the days of the year at which events occur.
 
   ## Examples
@@ -72,227 +69,108 @@ defmodule ICalendar.Recurrence do
             |> Enum.to_list()
 
   """
-  @spec get_recurrences(%Event{}) :: %Stream{}
-  @spec get_recurrences(%Event{}, %DateTime{}) :: %Stream{}
-  def get_recurrences(event, end_date \\ DateTime.utc_now()) do
-    by_x_rrules =
-      if is_map(event.rrule), do: Map.take(event.rrule, @supported_by_x_rrules), else: %{}
+  @spec get_recurrences(%Event{}, %DateTime{}, %DateTime{}) :: [%Event{}]
+  def get_recurrences(
+        event,
+        %DateTime{} = start_date,
+        %DateTime{} = end_date \\ DateTime.utc_now(),
+        user_timezone \\ nil
+      ) do
+    # timezone fallback
+    calendar_timezone =
+      event.x_wr_timezone ||
+        user_timezone ||
+        "Etc/UTC"
 
-    reference_events =
-      if by_x_rrules != %{} do
-        # If there are any by_x modifiers in the rrule, build reference events based on them
-        # Remove the invalid reference events later on
-        build_refernce_events_by_x_rules(event, by_x_rrules)
-      else
-        [event]
-      end
-
-    case event.rrule do
+    case event.rrule_str do
       nil ->
-        Stream.map([nil], fn _ -> [] end)
+        []
 
-      %{freq: "DAILY", count: count, interval: interval} ->
-        add_recurring_events_count(event, reference_events, count, days: interval)
+      rrule ->
+        {:ok, {occurrences, _has_more}} =
+          RRule.all_between(
+            rrule,
+            start_date,
+            end_date
+          )
 
-      %{freq: "DAILY", until: until, interval: interval} ->
-        add_recurring_events_until(event, reference_events, until, days: interval)
+        # occurrences =
+        #   if occurrences != [] &&
+        #          DateTime.compare(
+        #            Enum.at(occurrences, 0),
+        #            to_timezone(event.dtstart, calendar_timezone)
+        #          ) == :eq do
+        #       occurrences
+        #     else
+        #       [to_timezone(event.dtstart, calendar_timezone) | occurrences]
+        #     end
 
-      %{freq: "DAILY", count: count} ->
-        add_recurring_events_count(event, reference_events, count, days: 1)
-
-      %{freq: "DAILY", until: until} ->
-        add_recurring_events_until(event, reference_events, until, days: 1)
-
-      %{freq: "DAILY", interval: interval} ->
-        add_recurring_events_until(event, reference_events, end_date, days: interval)
-
-      %{freq: "DAILY"} ->
-        add_recurring_events_until(event, reference_events, end_date, days: 1)
-
-      %{freq: "WEEKLY", until: until, interval: interval} ->
-        add_recurring_events_until(event, reference_events, until, days: interval * 7)
-
-      %{freq: "WEEKLY", count: count} ->
-        add_recurring_events_count(event, reference_events, count, days: 7)
-
-      %{freq: "WEEKLY", until: until} ->
-        add_recurring_events_until(event, reference_events, until, days: 7)
-
-      %{freq: "WEEKLY", interval: interval} ->
-        add_recurring_events_until(event, reference_events, end_date, days: interval * 7)
-
-      %{freq: "WEEKLY"} ->
-        add_recurring_events_until(event, reference_events, end_date, days: 7)
-
-      %{freq: "MONTHLY", count: count, interval: interval} ->
-        add_recurring_events_count(event, reference_events, count, months: interval)
-
-      %{freq: "MONTHLY", until: until, interval: interval} ->
-        add_recurring_events_until(event, reference_events, until, months: interval)
-
-      %{freq: "MONTHLY", count: count} ->
-        add_recurring_events_count(event, reference_events, count, months: 1)
-
-      %{freq: "MONTHLY", until: until} ->
-        add_recurring_events_until(event, reference_events, until, months: 1)
-
-      %{freq: "MONTHLY", interval: interval} ->
-        add_recurring_events_until(event, reference_events, end_date, months: interval)
-
-      %{freq: "MONTHLY"} ->
-        add_recurring_events_until(event, reference_events, end_date, months: 1)
-
-      %{freq: "YEARLY", count: count, interval: interval} ->
-        add_recurring_events_count(event, reference_events, count, years: interval)
-
-      %{freq: "YEARLY", until: until, interval: interval} ->
-        add_recurring_events_until(event, reference_events, until, years: interval)
-
-      %{freq: "YEARLY", count: count} ->
-        add_recurring_events_count(event, reference_events, count, years: 1)
-
-      %{freq: "YEARLY", until: until} ->
-        add_recurring_events_until(event, reference_events, until, years: 1)
-
-      %{freq: "YEARLY", interval: interval} ->
-        add_recurring_events_until(event, reference_events, end_date, years: interval)
-
-      %{freq: "YEARLY"} ->
-        add_recurring_events_until(event, reference_events, end_date, years: 1)
+        occurrences
+        |> Stream.map(&to_timezone(&1, calendar_timezone))
+        |> Enum.map(&map_to_event(event, &1, calendar_timezone))
     end
   end
 
-  defp add_recurring_events_until(original_event, reference_events, until, shift_opts) do
-    Stream.resource(
-      fn -> [reference_events] end,
-      fn acc_events ->
-        # Use the previous batch of the events as the reference for the next batch
-        [prev_event_batch | _] = acc_events
+  defp to_timezone(datetime, timezone) do
+    case datetime do
+      %NaiveDateTime{} ->
+        DateTime.from_naive!(datetime, timezone)
 
-        case prev_event_batch do
-          [] ->
-            {:halt, acc_events}
+      %DateTime{} ->
+        datetime |> DateTime.shift_zone!(timezone)
 
-          prev_event_batch ->
-            new_events =
-              Enum.map(prev_event_batch, fn reference_event ->
-                new_event = shift_event(reference_event, shift_opts)
-
-                case Timex.compare(new_event.dtstart, until) do
-                  1 -> []
-                  _ -> [new_event]
-                end
-              end)
-              |> List.flatten()
-
-            {remove_excluded_dates(new_events, original_event), [new_events | acc_events]}
-        end
-      end,
-      fn recurrences ->
-        recurrences
-      end
-    )
-  end
-
-  defp add_recurring_events_count(original_event, reference_events, count, shift_opts) do
-    Stream.resource(
-      fn -> {[reference_events], count} end,
-      fn {acc_events, count} ->
-        # Use the previous batch of the events as the reference for the next batch
-        [prev_event_batch | _] = acc_events
-
-        case prev_event_batch do
-          [] ->
-            {:halt, acc_events}
-
-          prev_event_batch ->
-            new_events =
-              Enum.map(prev_event_batch, fn reference_event ->
-                new_event = shift_event(reference_event, shift_opts)
-
-                if count > 1 do
-                  [new_event]
-                else
-                  []
-                end
-              end)
-              |> List.flatten()
-
-            {remove_excluded_dates(new_events, original_event),
-             {[new_events | acc_events], count - 1}}
-        end
-      end,
-      fn recurrences ->
-        recurrences
-      end
-    )
-  end
-
-  defp shift_event(event, shift_opts) do
-    Map.merge(event, %{
-      dtstart: shift_date(event.dtstart, shift_opts),
-      dtend: shift_date(event.dtend, shift_opts),
-      rrule: Map.put(event.rrule, :is_recurrence, true)
-    })
-  end
-
-  defp shift_date(date, shift_opts) do
-    case Timex.shift(date, shift_opts) do
-      %Timex.AmbiguousDateTime{} = new_date ->
-        new_date.after
-
-      new_date ->
-        new_date
+      %Date{} ->
+        # When a date is converted it will use the hour offset from
+        # TODO: should be the start of the day in that timezone
+        DateTime.from_naive!(
+          NaiveDateTime.new(datetime, ~T[00:00:00]) |> elem(1),
+          timezone
+        )
     end
   end
 
-  defp build_refernce_events_by_x_rules(event, by_x_rrules) do
-    by_x_rrules
-    |> Map.keys()
-    |> Enum.map(fn by_x ->
-      build_refernce_events_by_x_rule(event, by_x)
-    end)
-    |> List.flatten()
-  end
-
-  @valid_days ["SU", "MO", "TU", "WE", "TH", "FR", "SA"]
-  @day_values %{su: 0, mo: 1, tu: 2, we: 3, th: 4, fr: 5, sa: 6}
-
-  defp build_refernce_events_by_x_rule(
-         %{rrule: %{byday: bydays}} = event,
-         :byday
-       ) do
-    bydays
-    |> Enum.map(fn byday ->
-      if byday in @valid_days do
-        day_atom = byday |> String.downcase() |> String.to_atom()
-
-        # determine the difference between the byday and the event's dtstart
-        day_offset_for_reference = Map.get(@day_values, day_atom) - Timex.weekday(event.dtstart)
-
-        Map.merge(event, %{
-          dtstart: Timex.shift(event.dtstart, days: day_offset_for_reference),
-          dtend: Timex.shift(event.dtend, days: day_offset_for_reference)
-        })
-      else
-        # Ignore the invalid byday value
-        nil
+  defp map_to_event(original_event, new_dtstart, calendar_timezone) do
+    duration =
+      cond do
+        true ->
+          DateTime.diff(
+            to_timezone(original_event.dtend, calendar_timezone),
+            to_timezone(original_event.dtstart, calendar_timezone),
+            :second
+          )
       end
-    end)
-    |> Enum.filter(&(!is_nil(&1)))
+
+    final_dtstart = to_timezone(new_dtstart, calendar_timezone)
+
+    final_dtend =
+      cond do
+        true ->
+          DateTime.add(final_dtstart, duration, :second)
+      end
+
+    %{
+      original_event
+      | dtstart: final_dtstart,
+        dtend: final_dtend,
+        rrule: original_event.rrule
+    }
   end
 
   defp remove_excluded_dates(recurrences, original_event) do
     Enum.filter(recurrences, fn new_event ->
-      # Make sure new event doesn't fall on an EXDATE
-      falls_on_exdate = not is_nil(new_event) and new_event.dtstart in new_event.exdates
+      # The exdates can be Date or DateTime, so we need to handle both.
+      falls_on_exdate =
+        Enum.any?(original_event.exdates, fn exdate ->
+          case exdate do
+            %Date{} ->
+              Date.compare(DateTime.to_date(new_event.dtstart), exdate) == :eq
 
-      #  This removes any events which were created as references
-      is_invalid_reference_event =
-        DateTime.compare(new_event.dtstart, original_event.dtstart) == :lt
+            %DateTime{} ->
+              DateTime.compare(new_event.dtstart, exdate) == :eq
+          end
+        end)
 
-      !falls_on_exdate &&
-        !is_invalid_reference_event
+      !falls_on_exdate
     end)
   end
 end

@@ -7,6 +7,7 @@ defmodule ICalendar.Event do
             dtstart: nil,
             dtend: nil,
             rrule: nil,
+            rrule_str: nil,
             exdates: [],
             description: nil,
             location: nil,
@@ -21,7 +22,8 @@ defmodule ICalendar.Event do
             modified: nil,
             organizer: nil,
             sequence: nil,
-            attendees: []
+            attendees: [],
+            x_wr_timezone: nil
 end
 
 defimpl ICalendar.Serialize, for: ICalendar.Event do

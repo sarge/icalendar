@@ -8,13 +8,18 @@ defimpl ICalendar.Deserialize, for: BitString do
   alias ICalendar.Util.Deserialize
 
   def from_ics(ics) do
-    ics
-    |> String.trim()
-    |> adjust_wrapped_lines()
-    |> String.split("\n")
-    |> Enum.map(&String.trim_trailing/1)
-    |> Enum.map(&String.replace(&1, ~S"\n", "\n"))
-    |> get_events()
+    calendar_lines =
+      ics
+      |> String.trim()
+      |> adjust_wrapped_lines()
+      |> String.split("\n")
+      |> Enum.map(&String.trim_trailing/1)
+      |> Enum.map(&String.replace(&1, ~S"\n", "\n"))
+
+    # Extract X-WR-TIMEZONE from calendar level
+    x_wr_timezone = extract_x_wr_timezone(calendar_lines)
+
+    get_events(calendar_lines, [], [], x_wr_timezone)
   end
 
   # Copy approach from Ruby library to deal with Google Calendar's wrapping
@@ -24,26 +29,46 @@ defimpl ICalendar.Deserialize, for: BitString do
     String.replace(body, ~r/\r?\n[ \t]/, "")
   end
 
-  defp get_events(calendar_data, event_collector \\ [], temp_collector \\ [])
+  defp extract_x_wr_timezone(calendar_lines) do
+    calendar_lines
+    |> Enum.find(fn line ->
+      String.starts_with?(line, "X-WR-TIMEZONE:")
+    end)
+    |> case do
+      nil ->
+        nil
 
-  defp get_events([head | calendar_data], event_collector, temp_collector) do
-    case head do
-      "BEGIN:VEVENT" ->
-        # start collecting event
-        get_events(calendar_data, event_collector, [head])
-
-      "END:VEVENT" ->
-        # finish collecting event
-        event = Deserialize.build_event(temp_collector ++ [head])
-        get_events(calendar_data, [event] ++ event_collector, [])
-
-      event_property when temp_collector != [] ->
-        get_events(calendar_data, event_collector, temp_collector ++ [event_property])
-
-      _unimportant_stuff ->
-        get_events(calendar_data, event_collector, temp_collector)
+      line ->
+        [_, timezone] = String.split(line, ":", parts: 2)
+        timezone
     end
   end
 
-  defp get_events([], event_collector, _temp_collector), do: event_collector
+  defp get_events(calendar_data, event_collector, temp_collector, x_wr_timezone)
+
+  defp get_events([head | calendar_data], event_collector, temp_collector, x_wr_timezone) do
+    case head do
+      "BEGIN:VEVENT" ->
+        # start collecting event
+        get_events(calendar_data, event_collector, [head], x_wr_timezone)
+
+      "END:VEVENT" ->
+        # finish collecting event
+        event = Deserialize.build_event(temp_collector ++ [head], x_wr_timezone)
+        get_events(calendar_data, [event] ++ event_collector, [], x_wr_timezone)
+
+      event_property when temp_collector != [] ->
+        get_events(
+          calendar_data,
+          event_collector,
+          temp_collector ++ [event_property],
+          x_wr_timezone
+        )
+
+      _unimportant_stuff ->
+        get_events(calendar_data, event_collector, temp_collector, x_wr_timezone)
+    end
+  end
+
+  defp get_events([], event_collector, _temp_collector, _x_wr_timezone), do: event_collector
 end

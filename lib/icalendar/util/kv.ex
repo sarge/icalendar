@@ -69,9 +69,12 @@ defmodule ICalendar.Util.KV do
     # FREQ rule part MUST be the first rule part specified in a RECUR value.
     freq = rrules.freq
 
+    rrule_keys = [:until, :interval, :byday, :bysetpos]
+
     rrule_tail_part =
-      rrules
-      |> Map.delete(:freq)
+      rrule_keys
+      |> Enum.map(fn key -> {key, Map.get(rrules, key)} end)
+      |> Enum.reject(fn {_key, value} -> is_nil(value) end)
       |> Enum.map(fn {key, value} ->
         value =
           case {key, value} do

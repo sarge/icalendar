@@ -7,10 +7,31 @@ defmodule ICalendar.Util.Deserialize do
   alias ICalendar.Property
 
   def build_event(lines) when is_list(lines) do
+    build_event(lines, nil)
+  end
+
+  def build_event(lines, x_wr_timezone) when is_list(lines) do
+    initial_event = %Event{
+      rrule_str: extract_rrule_properties_from_ical(lines),
+      x_wr_timezone: x_wr_timezone
+    }
+
     lines
     |> Enum.filter(&(&1 != ""))
     |> Enum.map(&retrieve_kvs/1)
-    |> Enum.reduce(%Event{}, &parse_attr/2)
+    |> Enum.reduce(initial_event, &parse_attr/2)
+  end
+
+  defp extract_rrule_properties_from_ical(lines) do
+    lines
+    |> Enum.filter(fn line ->
+      String.starts_with?(line, "RRULE") or
+        String.starts_with?(line, "EXRULE") or
+        String.starts_with?(line, "DTSTART") or
+        String.starts_with?(line, "RDATE") or
+        String.starts_with?(line, "EXDATE")
+    end)
+    |> Enum.join("\n")
   end
 
   @doc ~S"""
@@ -79,7 +100,7 @@ defmodule ICalendar.Util.Deserialize do
         %Property{key: "DTSTART", value: dtstart, params: params},
         acc
       ) do
-    {:ok, timestamp} = to_date(dtstart, params)
+    {:ok, timestamp} = to_date(dtstart, params, acc.x_wr_timezone)
     %{acc | dtstart: timestamp}
   end
 
@@ -87,7 +108,7 @@ defmodule ICalendar.Util.Deserialize do
         %Property{key: "DTEND", value: dtend, params: params},
         acc
       ) do
-    {:ok, timestamp} = to_date(dtend, params)
+    {:ok, timestamp} = to_date(dtend, params, acc.x_wr_timezone)
     %{acc | dtend: timestamp}
   end
 
@@ -108,7 +129,7 @@ defmodule ICalendar.Util.Deserialize do
         acc
       ) do
     exdates = Map.get(acc, :exdates, [])
-    {:ok, timestamp} = to_date(exdate, params)
+    {:ok, timestamp} = to_date(exdate, params, acc.x_wr_timezone)
     %{acc | exdates: [timestamp | exdates]}
   end
 
@@ -172,7 +193,7 @@ defmodule ICalendar.Util.Deserialize do
         %Property{key: "LAST-MODIFIED", value: modified},
         acc
       ) do
-    {:ok, timestamp} = to_date(modified)
+    {:ok, timestamp} = to_date(modified, %{}, nil)
     %{acc | modified: timestamp}
   end
 
@@ -233,6 +254,55 @@ defmodule ICalendar.Util.Deserialize do
       ...> [Timex.to_erl(date), date.time_zone]
       [{{1998, 1, 19}, {2, 0, 0}}, "America/Chicago"]
   """
+
+  # New overloads that handle X-WR-TIMEZONE
+  def to_date(date_string, %{"VALUE" => "DATE"} = _params, _x_wr_timezone) do
+    # When VALUE=DATE is present, always treat as date regardless of other parameters
+    case Timex.parse(date_string, "{YYYY}{0M}{0D}") do
+      {:ok, date} -> {:ok, Timex.to_date(date)}
+      error -> error
+    end
+  end
+
+  def to_date(date_string, %{"TZID" => timezone}, _x_wr_timezone) do
+    to_date(date_string, %{"TZID" => timezone})
+  end
+
+  def to_date(date_string, params, x_wr_timezone) when is_binary(x_wr_timezone) do
+    # Check if we have a hanging datetime (full datetime without timezone indicator)
+    # Pattern: YYYYMMDDTHHMMSS (no Z suffix, no TZID param)
+    if String.match?(date_string, ~r/^\d{8}T\d{6}$/) and not Map.has_key?(params, "TZID") do
+      # Parse as naive datetime and interpret in X-WR-TIMEZONE
+      case Timex.parse(date_string, "{YYYY}{0M}{0D}T{h24}{m}{s}") do
+        {:ok, naive_datetime} ->
+          # Treat as being in the X-WR-TIMEZONE and convert to UTC
+          timezone_datetime = Timex.to_datetime(naive_datetime, x_wr_timezone)
+          utc_datetime = Timex.to_datetime(timezone_datetime, "UTC")
+          {:ok, utc_datetime}
+
+        error ->
+          error
+      end
+    else
+      # For all other cases, ignore X-WR-TIMEZONE and use existing logic
+      to_date(date_string, params)
+    end
+  end
+
+  def to_date(date_string, params, _x_wr_timezone) do
+    # For all other cases, ignore X-WR-TIMEZONE and use existing logic
+    to_date(date_string, params)
+  end
+
+  # Original functions (keeping for backward compatibility)
+  def to_date(date_string, %{"VALUE" => "DATE"} = _params) do
+    # When VALUE=DATE is present, always treat as date regardless of other parameters
+    case Timex.parse(date_string, "{YYYY}{0M}{0D}") do
+      {:ok, date} -> {:ok, Timex.to_date(date)}
+      error -> error
+    end
+  end
+
   def to_date(date_string, %{"TZID" => timezone}) do
     # Microsoft Outlook calendar .ICS files report times in Greenwich Standard Time (UTC +0)
     # so just convert this to UTC
@@ -252,11 +322,13 @@ defmodule ICalendar.Util.Deserialize do
     Timex.parse(date_string <> timezone, "{YYYY}{0M}{0D}T{h24}{m}{s}Z{Zname}")
   end
 
-  def to_date(date_string, %{"VALUE" => "DATE"}) do
-    to_date(date_string <> "T000000Z")
-  end
-
   def to_date(date_string, %{}) do
+    date_string =
+      case String.last(date_string) do
+        "Z" -> date_string
+        _ -> date_string <> "Z"
+      end
+
     to_date(date_string, %{"TZID" => "Etc/UTC"})
   end
 
