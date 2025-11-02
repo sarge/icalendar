@@ -11,9 +11,14 @@ defmodule ICalendar.Util.Deserialize do
   end
 
   def build_event(lines, x_wr_timezone) when is_list(lines) do
+    build_event(lines, x_wr_timezone, nil)
+  end
+
+  def build_event(lines, x_wr_timezone, prodid) when is_list(lines) do
     initial_event = %Event{
       rrule_str: extract_rrule_properties_from_ical(lines),
-      x_wr_timezone: x_wr_timezone
+      x_wr_timezone: x_wr_timezone,
+      prodid: prodid
     }
 
     lines

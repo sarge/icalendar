@@ -87,27 +87,45 @@ defmodule ICalendar.Recurrence do
         []
 
       rrule ->
-        {:ok, {occurrences, _has_more}} =
-          RRule.all_between(
-            rrule,
-            start_date,
-            end_date
-          )
+        # Append X-INCLUDE-DTSTART=TRUE for Google Calendar (detected via PRODID)
+        is_google_calendar = is_google_calendar?(event.prodid)
 
-        # occurrences =
-        #   if occurrences != [] &&
-        #          DateTime.compare(
-        #            Enum.at(occurrences, 0),
-        #            to_timezone(event.dtstart, calendar_timezone)
-        #          ) == :eq do
-        #       occurrences
-        #     else
-        #       [to_timezone(event.dtstart, calendar_timezone) | occurrences]
-        #     end
+        enhanced_rrule =
+          if is_google_calendar do
+            # Check if X-INCLUDE-DTSTART is already present to avoid duplicates
+            if String.contains?(String.upcase(rrule), "X-INCLUDE-DTSTART") do
+              rrule
+            else
+              # Find the RRULE line and append X-INCLUDE-DTSTART=TRUE to it
+              rrule_lines = String.split(rrule, "\n")
+              enhanced_lines = Enum.map(rrule_lines, fn line ->
+                if String.starts_with?(String.upcase(line), "RRULE:") do
+                  line <> ";X-INCLUDE-DTSTART=TRUE"
+                else
+                  line
+                end
+              end)
+              Enum.join(enhanced_lines, "\n")
+            end
+          else
+            rrule
+          end
 
-        occurrences
-        |> Stream.map(&to_timezone(&1, calendar_timezone))
-        |> Enum.map(&map_to_event(event, &1, calendar_timezone))
+        rrule_upper = String.upcase(enhanced_rrule)
+        if String.contains?(rrule_upper, "RRULE") or String.contains?(rrule_upper, "RDATE") do
+          {:ok, {occurrences, _has_more}} =
+            RRule.all_between(
+              enhanced_rrule,
+              start_date,
+              end_date
+            )
+
+          occurrences
+          |> Stream.map(&to_timezone(&1, calendar_timezone))
+          |> Enum.map(&map_to_event(event, &1, calendar_timezone))
+        else
+          []
+        end
     end
   end
 
@@ -156,21 +174,11 @@ defmodule ICalendar.Recurrence do
     }
   end
 
-  defp remove_excluded_dates(recurrences, original_event) do
-    Enum.filter(recurrences, fn new_event ->
-      # The exdates can be Date or DateTime, so we need to handle both.
-      falls_on_exdate =
-        Enum.any?(original_event.exdates, fn exdate ->
-          case exdate do
-            %Date{} ->
-              Date.compare(DateTime.to_date(new_event.dtstart), exdate) == :eq
-
-            %DateTime{} ->
-              DateTime.compare(new_event.dtstart, exdate) == :eq
-          end
-        end)
-
-      !falls_on_exdate
-    end)
+  # Helper function to detect Google Calendar from PRODID
+  defp is_google_calendar?(prodid) when is_binary(prodid) do
+    prodid_upper = String.upcase(prodid)
+    String.contains?(prodid_upper, "GOOGLE") and String.contains?(prodid_upper, "CALENDAR")
   end
+
+  defp is_google_calendar?(nil), do: false
 end

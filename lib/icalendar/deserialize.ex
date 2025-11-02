@@ -16,10 +16,11 @@ defimpl ICalendar.Deserialize, for: BitString do
       |> Enum.map(&String.trim_trailing/1)
       |> Enum.map(&String.replace(&1, ~S"\n", "\n"))
 
-    # Extract X-WR-TIMEZONE from calendar level
+    # Extract X-WR-TIMEZONE and PRODID from calendar level
     x_wr_timezone = extract_x_wr_timezone(calendar_lines)
+    prodid = extract_prodid(calendar_lines)
 
-    get_events(calendar_lines, [], [], x_wr_timezone)
+    get_events(calendar_lines, [], [], x_wr_timezone, prodid)
   end
 
   # Copy approach from Ruby library to deal with Google Calendar's wrapping
@@ -44,31 +45,47 @@ defimpl ICalendar.Deserialize, for: BitString do
     end
   end
 
-  defp get_events(calendar_data, event_collector, temp_collector, x_wr_timezone)
+  defp extract_prodid(calendar_lines) do
+    calendar_lines
+    |> Enum.find(fn line ->
+      String.starts_with?(line, "PRODID:")
+    end)
+    |> case do
+      nil ->
+        nil
 
-  defp get_events([head | calendar_data], event_collector, temp_collector, x_wr_timezone) do
+      line ->
+        [_, prodid] = String.split(line, ":", parts: 2)
+        prodid
+    end
+  end
+
+  defp get_events(calendar_data, event_collector, temp_collector, x_wr_timezone, prodid)
+
+  defp get_events([head | calendar_data], event_collector, temp_collector, x_wr_timezone, prodid) do
     case head do
       "BEGIN:VEVENT" ->
         # start collecting event
-        get_events(calendar_data, event_collector, [head], x_wr_timezone)
+        get_events(calendar_data, event_collector, [head], x_wr_timezone, prodid)
 
       "END:VEVENT" ->
         # finish collecting event
-        event = Deserialize.build_event(temp_collector ++ [head], x_wr_timezone)
-        get_events(calendar_data, [event] ++ event_collector, [], x_wr_timezone)
+        event = Deserialize.build_event(temp_collector ++ [head], x_wr_timezone, prodid)
+        get_events(calendar_data, [event] ++ event_collector, [], x_wr_timezone, prodid)
 
       event_property when temp_collector != [] ->
         get_events(
           calendar_data,
           event_collector,
           temp_collector ++ [event_property],
-          x_wr_timezone
+          x_wr_timezone,
+          prodid
         )
 
       _unimportant_stuff ->
-        get_events(calendar_data, event_collector, temp_collector, x_wr_timezone)
+        get_events(calendar_data, event_collector, temp_collector, x_wr_timezone, prodid)
     end
   end
 
-  defp get_events([], event_collector, _temp_collector, _x_wr_timezone), do: event_collector
+  defp get_events([], event_collector, _temp_collector, _x_wr_timezone, _prodid), do: event_collector
 end
