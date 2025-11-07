@@ -69,8 +69,9 @@ defmodule ICalendar.RecurrenceDateTest do
     end)
   end
 
-  @tag :skip
+
   describe "FREQ=DAILY - Basic" do
+    @tag :skip
     test "FREQ=DAILY" do
       results =
         create_ical_event(
