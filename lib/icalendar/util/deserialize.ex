@@ -11,12 +11,32 @@ defmodule ICalendar.Util.Deserialize do
   end
 
   def build_event(lines, x_wr_timezone) when is_list(lines) do
-    initial_event = %Event{x_wr_timezone: x_wr_timezone}
+    build_event(lines, x_wr_timezone, nil)
+  end
+
+  def build_event(lines, x_wr_timezone, prodid) when is_list(lines) do
+    initial_event = %Event{
+      rrule_str: extract_rrule_properties_from_ical(lines),
+      x_wr_timezone: x_wr_timezone,
+      prodid: prodid
+    }
 
     lines
     |> Enum.filter(&(&1 != ""))
     |> Enum.map(&retrieve_kvs/1)
     |> Enum.reduce(initial_event, &parse_attr/2)
+  end
+
+  defp extract_rrule_properties_from_ical(lines) do
+    lines
+    |> Enum.filter(fn line ->
+      String.starts_with?(line, "RRULE") or
+        String.starts_with?(line, "EXRULE") or
+        String.starts_with?(line, "DTSTART") or
+        String.starts_with?(line, "RDATE") or
+        String.starts_with?(line, "EXDATE")
+    end)
+    |> Enum.join("\n")
   end
 
   @doc ~S"""
@@ -210,6 +230,13 @@ defmodule ICalendar.Util.Deserialize do
     %{acc | url: url |> desanitized() |> String.downcase()}
   end
 
+  def parse_attr(
+        %Property{key: "TRANSP", value: transp},
+        acc
+      ) do
+    %{acc | transp: transp |> desanitized() |> String.downcase()}
+  end
+
   def parse_attr(_, acc), do: acc
 
   @doc ~S"""
@@ -241,29 +268,16 @@ defmodule ICalendar.Util.Deserialize do
   """
 
   # New overloads that handle X-WR-TIMEZONE
-  def to_date(date_string, %{"TZID" => timezone}, _x_wr_timezone) do
-    to_date(date_string, %{"TZID" => timezone})
-  end
-
-  def to_date(date_string, %{"VALUE" => "DATE"}, x_wr_timezone) when is_binary(x_wr_timezone) do
-    # When we have a date (no time) and X-WR-TIMEZONE, treat as midnight in that timezone
-    # and convert to UTC
+  def to_date(date_string, %{"VALUE" => "DATE"} = _params, _x_wr_timezone) do
+    # When VALUE=DATE is present, always treat as date regardless of other parameters
     case Timex.parse(date_string, "{YYYY}{0M}{0D}") do
-      {:ok, naive_date} ->
-        # Create a datetime at midnight in the specified timezone
-        midnight_datetime = Timex.to_datetime(naive_date, x_wr_timezone)
-        # Convert to UTC
-        utc_datetime = Timex.to_datetime(midnight_datetime, "UTC")
-        {:ok, utc_datetime}
-
-      error ->
-        error
+      {:ok, date} -> {:ok, Timex.to_date(date)}
+      error -> error
     end
   end
 
-  def to_date(date_string, %{"VALUE" => "DATE"}, _x_wr_timezone) do
-    # No X-WR-TIMEZONE or it's nil, use default behavior (midnight UTC)
-    to_date(date_string <> "T000000Z")
+  def to_date(date_string, %{"TZID" => timezone}, _x_wr_timezone) do
+    to_date(date_string, %{"TZID" => timezone})
   end
 
   def to_date(date_string, params, x_wr_timezone) when is_binary(x_wr_timezone) do
@@ -293,6 +307,14 @@ defmodule ICalendar.Util.Deserialize do
   end
 
   # Original functions (keeping for backward compatibility)
+  def to_date(date_string, %{"VALUE" => "DATE"} = _params) do
+    # When VALUE=DATE is present, always treat as date regardless of other parameters
+    case Timex.parse(date_string, "{YYYY}{0M}{0D}") do
+      {:ok, date} -> {:ok, Timex.to_date(date)}
+      error -> error
+    end
+  end
+
   def to_date(date_string, %{"TZID" => timezone}) do
     # Microsoft Outlook calendar .ICS files report times in Greenwich Standard Time (UTC +0)
     # so just convert this to UTC
@@ -312,11 +334,13 @@ defmodule ICalendar.Util.Deserialize do
     Timex.parse(date_string <> timezone, "{YYYY}{0M}{0D}T{h24}{m}{s}Z{Zname}")
   end
 
-  def to_date(date_string, %{"VALUE" => "DATE"}) do
-    to_date(date_string <> "T000000Z")
-  end
-
   def to_date(date_string, %{}) do
+    date_string =
+      case String.last(date_string) do
+        "Z" -> date_string
+        _ -> date_string <> "Z"
+      end
+
     to_date(date_string, %{"TZID" => "Etc/UTC"})
   end
 

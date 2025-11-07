@@ -23,7 +23,8 @@ defmodule ICalendar.Util.DeserializeTest do
              dtstart: Timex.to_datetime({{2015, 12, 24}, {8, 30, 0}}),
              dtend: Timex.to_datetime({{2015, 12, 24}, {8, 45, 0}}),
              location: nil,
-             summary: "Going fishing"
+             summary: "Going fishing",
+             rrule_str: "DTSTART:20151224T083000Z"
            }
   end
 
@@ -41,7 +42,8 @@ defmodule ICalendar.Util.DeserializeTest do
              dtstart: nil,
              dtend: nil,
              summary: nil,
-             description: nil
+             description: nil,
+             rrule_str: ""
            }
   end
 
@@ -241,5 +243,34 @@ defmodule ICalendar.Util.DeserializeTest do
                ^dt2
              ]
            } = event
+  end
+
+  test "to_date parses date with VALUE=DATE and TZID parameters" do
+    # Test the specific format: DTSTART;VALUE=DATE;TZID=Pacific/Auckland:20251017
+    {:ok, date} =
+      Deserialize.to_date("20251017", %{"VALUE" => "DATE", "TZID" => "Pacific/Auckland"})
+
+    # When VALUE=DATE is present, timezone information should be ignored
+    # and the result should be a Date struct (not DateTime)
+    assert %Date{} = date
+    assert date.year == 2025
+    assert date.month == 10
+    assert date.day == 17
+  end
+
+  test "to_date handles VALUE=DATE parameter correctly regardless of TZID" do
+    # Test that VALUE=DATE takes precedence over TZID
+    {:ok, date1} = Deserialize.to_date("20251017", %{"VALUE" => "DATE"})
+
+    {:ok, date2} =
+      Deserialize.to_date("20251017", %{"VALUE" => "DATE", "TZID" => "Pacific/Auckland"})
+
+    {:ok, date3} =
+      Deserialize.to_date("20251017", %{"VALUE" => "DATE", "TZID" => "America/New_York"})
+
+    # All should return the same Date regardless of timezone
+    assert date1 == date2
+    assert date2 == date3
+    assert %Date{year: 2025, month: 10, day: 17} = date1
   end
 end

@@ -10,65 +10,8 @@ defmodule ICalendar.Recurrence do
 
   alias ICalendar.Event
 
-  # ignore :byhour, :monthday, :byyearday, :byweekno, :bymonth for now
-  @supported_by_x_rrules [:byday]
-
-  # Get the logical datetime for recurrence calculations.
-  #
-  # This function handles the case where X-WR-TIMEZONE was applied during parsing,
-  # converting a date-only value from the intended timezone to UTC, which may have
-  # changed the day of the week. For recurrence calculations, we need to work with
-  # the original intended date.
-  defp get_logical_datetime(event) do
-    case event.x_wr_timezone do
-      nil ->
-        # No X-WR-TIMEZONE, use the datetime as-is
-        event.dtstart
-
-      timezone when is_binary(timezone) ->
-        # Event has X-WR-TIMEZONE, check if this looks like a converted date-only value
-        # Date-only values in X-WR-TIMEZONE get converted to UTC, potentially changing the day
-        if is_likely_converted_date_only_value?(event.dtstart, timezone) do
-          # For date-only values, we want to use the "logical" date for recurrence calculations
-          # This means the date as it appears in the original timezone, but at midnight UTC
-          original_datetime = Timex.to_datetime(event.dtstart, timezone)
-          original_date = Timex.to_date(original_datetime)
-          # Create the logical datetime: the same date at midnight UTC
-          DateTime.from_naive!(Timex.to_naive_datetime(original_date), "Etc/UTC")
-        else
-          # Not a converted date-only value, use as-is
-          event.dtstart
-        end
-    end
-  end
-
-  defp get_logical_datetime(event, :dtend) do
-    case event.x_wr_timezone do
-      nil ->
-        event.dtend
-
-      timezone when is_binary(timezone) ->
-        if is_likely_converted_date_only_value?(event.dtend, timezone) do
-          original_datetime = Timex.to_datetime(event.dtend, timezone)
-          original_date = Timex.to_date(original_datetime)
-          # Create the logical datetime: the same date at midnight UTC
-          DateTime.from_naive!(Timex.to_naive_datetime(original_date), "Etc/UTC")
-        else
-          event.dtend
-        end
-    end
-  end
-
-  # Heuristic to detect if a datetime is likely the result of converting a date-only value
-  # with X-WR-TIMEZONE. This is imperfect but should work for common cases.
-  defp is_likely_converted_date_only_value?(datetime, timezone) do
-    # Convert the UTC datetime to the original timezone and check if it's at midnight
-    timezone_dt = Timex.to_datetime(datetime, timezone)
-    timezone_dt.hour == 0 and timezone_dt.minute == 0 and timezone_dt.second == 0
-  end
-
   @doc """
-  Given an event, return a stream of recurrences for that event.
+  Given an event, return a list of recurrences for that event.
 
   Warning: this may create a very large sequence of event recurrences.
 
@@ -103,6 +46,7 @@ defmodule ICalendar.Recurrence do
       This takes precedence over the `end_date` parameter.
 
     - `byday` *(optional)*: Represents the days of the week at which events occur.
+    - `bymonth` *(optional)*: Represents the months at which events occur.
 
     The `freq` option is required for a valid rrule, but the others are
     optional. They may be used either individually (ex. just `freq`) or in
@@ -113,7 +57,6 @@ defmodule ICalendar.Recurrence do
     - `byhour` *(optional)*: Represents the hours of the day at which events occur.
     - `byweekno` *(optional)*: Represents the week number at which events occur.
     - `bymonthday` *(optional)*: Represents the days of the month at which events occur.
-    - `bymonth` *(optional)*: Represents the months at which events occur.
     - `byyearday` *(optional)*: Represents the days of the year at which events occur.
 
   ## Examples
@@ -126,265 +69,140 @@ defmodule ICalendar.Recurrence do
             |> Enum.to_list()
 
   """
-  @spec get_recurrences(%Event{}) :: %Stream{}
-  @spec get_recurrences(%Event{}, %DateTime{}) :: %Stream{}
-  def get_recurrences(event, end_date \\ DateTime.utc_now()) do
-    by_x_rrules =
-      if is_map(event.rrule), do: Map.take(event.rrule, @supported_by_x_rrules), else: %{}
+  @spec get_recurrences(%Event{}, %DateTime{}, %DateTime{}) :: [%Event{}]
+  def get_recurrences(
+        event,
+        %DateTime{} = start_date,
+        %DateTime{} = end_date \\ DateTime.utc_now(),
+        user_timezone \\ nil
+      ) do
+    # timezone fallback
+    calendar_timezone =
+      user_timezone ||
+        event.x_wr_timezone ||
+        "Etc/UTC"
 
-    reference_events =
-      if by_x_rrules != %{} do
-        # If there are any by_x modifiers in the rrule, build reference events based on them
-        # Remove the invalid reference events later on
-        build_refernce_events_by_x_rules(event, by_x_rrules)
-      else
-        [event]
-      end
-
-    case event.rrule do
+    case event.rrule_str do
       nil ->
-        Stream.map([nil], fn _ -> [] end)
+        []
 
-      %{freq: "DAILY", count: count, interval: interval} ->
-        add_recurring_events_count(event, reference_events, count, days: interval)
+      rrule ->
+        enhanced_rrule =
+          rrule
+          |> append_google_include_dtstart(event)
+          |> append_local_tzid(event, calendar_timezone)
 
-      %{freq: "DAILY", until: until, interval: interval} ->
-        add_recurring_events_until(event, reference_events, until, days: interval)
+        rrule_upper = String.upcase(enhanced_rrule)
 
-      %{freq: "DAILY", count: count} ->
-        add_recurring_events_count(event, reference_events, count, days: 1)
+        if String.contains?(rrule_upper, "RRULE") or String.contains?(rrule_upper, "RDATE") do
+          {:ok, {occurrences, _has_more}} =
+            RRule.all_between(
+              enhanced_rrule,
+              start_date,
+              end_date
+            )
 
-      %{freq: "DAILY", until: until} ->
-        add_recurring_events_until(event, reference_events, until, days: 1)
-
-      %{freq: "DAILY", interval: interval} ->
-        add_recurring_events_until(event, reference_events, end_date, days: interval)
-
-      %{freq: "DAILY"} ->
-        add_recurring_events_until(event, reference_events, end_date, days: 1)
-
-      %{freq: "WEEKLY", until: until, interval: interval} ->
-        add_recurring_events_until(event, reference_events, until, days: interval * 7)
-
-      %{freq: "WEEKLY", count: count} ->
-        add_recurring_events_count(event, reference_events, count, days: 7)
-
-      %{freq: "WEEKLY", until: until} ->
-        add_recurring_events_until(event, reference_events, until, days: 7)
-
-      %{freq: "WEEKLY", interval: interval} ->
-        add_recurring_events_until(event, reference_events, end_date, days: interval * 7)
-
-      %{freq: "WEEKLY"} ->
-        add_recurring_events_until(event, reference_events, end_date, days: 7)
-
-      %{freq: "MONTHLY", count: count, interval: interval} ->
-        add_recurring_events_count(event, reference_events, count, months: interval)
-
-      %{freq: "MONTHLY", until: until, interval: interval} ->
-        add_recurring_events_until(event, reference_events, until, months: interval)
-
-      %{freq: "MONTHLY", count: count} ->
-        add_recurring_events_count(event, reference_events, count, months: 1)
-
-      %{freq: "MONTHLY", until: until} ->
-        add_recurring_events_until(event, reference_events, until, months: 1)
-
-      %{freq: "MONTHLY", interval: interval} ->
-        add_recurring_events_until(event, reference_events, end_date, months: interval)
-
-      %{freq: "MONTHLY"} ->
-        add_recurring_events_until(event, reference_events, end_date, months: 1)
-
-      %{freq: "YEARLY", count: count, interval: interval} ->
-        add_recurring_events_count(event, reference_events, count, years: interval)
-
-      %{freq: "YEARLY", until: until, interval: interval} ->
-        add_recurring_events_until(event, reference_events, until, years: interval)
-
-      %{freq: "YEARLY", count: count} ->
-        add_recurring_events_count(event, reference_events, count, years: 1)
-
-      %{freq: "YEARLY", until: until} ->
-        add_recurring_events_until(event, reference_events, until, years: 1)
-
-      %{freq: "YEARLY", interval: interval} ->
-        add_recurring_events_until(event, reference_events, end_date, years: interval)
-
-      %{freq: "YEARLY"} ->
-        add_recurring_events_until(event, reference_events, end_date, years: 1)
+          occurrences
+          |> Stream.map(&to_timezone(&1, calendar_timezone))
+          |> Enum.map(&map_to_event(event, &1, calendar_timezone))
+        else
+          []
+        end
     end
   end
 
-  defp add_recurring_events_until(original_event, reference_events, until, shift_opts) do
-    Stream.resource(
-      fn -> [reference_events] end,
-      fn acc_events ->
-        # Use the previous batch of the events as the reference for the next batch
-        [prev_event_batch | _] = acc_events
+  defp append_google_include_dtstart(rrule, event) do
+    # Append X-INCLUDE-DTSTART=TRUE for Google Calendar (detected via PRODID)
+    is_google_calendar = is_google_calendar?(event.prodid)
 
-        case prev_event_batch do
-          [] ->
-            {:halt, acc_events}
-
-          prev_event_batch ->
-            new_events =
-              Enum.map(prev_event_batch, fn reference_event ->
-                new_event = shift_event(reference_event, shift_opts)
-
-                case Timex.compare(new_event.dtstart, until) do
-                  1 -> []
-                  _ -> [new_event]
-                end
-              end)
-              |> List.flatten()
-
-            {remove_excluded_dates(new_events, original_event), [new_events | acc_events]}
+    if is_google_calendar && !String.contains?(String.upcase(rrule), "X-INCLUDE-DTSTART") do
+      # Split by lines and only append X-INCLUDE-DTSTART to RRULE lines
+      rrule
+      |> String.split("\n")
+      |> Enum.map(fn line ->
+        line_upper = String.upcase(line)
+        if String.starts_with?(line_upper, "RRULE:") do
+          line <> ";X-INCLUDE-DTSTART=TRUE"
+        else
+          line
         end
-      end,
-      fn recurrences ->
-        recurrences
-      end
-    )
+      end)
+      |> Enum.join("\n")
+    else
+      rrule
+    end
   end
 
-  defp add_recurring_events_count(original_event, reference_events, count, shift_opts) do
-    Stream.resource(
-      fn -> {[reference_events], count} end,
-      fn {acc_events, count} ->
-        # Use the previous batch of the events as the reference for the next batch
-        [prev_event_batch | _] = acc_events
-
-        case prev_event_batch do
-          [] ->
-            {:halt, acc_events}
-
-          prev_event_batch ->
-            new_events =
-              Enum.map(prev_event_batch, fn reference_event ->
-                new_event = shift_event(reference_event, shift_opts)
-
-                if count > 1 do
-                  [new_event]
-                else
-                  []
-                end
-              end)
-              |> List.flatten()
-
-            {remove_excluded_dates(new_events, original_event),
-             {[new_events | acc_events], count - 1}}
+  defp append_local_tzid(rrule, _event, calendar_timezone) do
+    # Append LOCAL-TZID if not already present
+    if String.contains?(rrule, "LOCAL-TZID") do
+      rrule
+    else
+      # Split by lines and only append LOCAL-TZID to RRULE lines
+      rrule
+      |> String.split("\n")
+      |> Enum.map(fn line ->
+        line_upper = String.upcase(line)
+        if String.starts_with?(line_upper, "RRULE:") do
+          line <> ";LOCAL-TZID=" <> calendar_timezone
+        else
+          line
         end
-      end,
-      fn recurrences ->
-        recurrences
+      end)
+      |> Enum.join("\n")
+    end
+  end
+
+  defp to_timezone(datetime, timezone) do
+    case datetime do
+      %NaiveDateTime{} ->
+        DateTime.from_naive!(datetime, timezone)
+
+      %DateTime{} ->
+        datetime |> DateTime.shift_zone!(timezone)
+
+      %Date{} ->
+        # When a date is converted it will use the hour offset from
+        # TODO: should be the start of the day in that timezone
+        DateTime.from_naive!(
+          NaiveDateTime.new(datetime, ~T[00:00:00]) |> elem(1),
+          timezone
+        )
+    end
+  end
+
+  defp map_to_event(original_event, new_dtstart, calendar_timezone) do
+    duration =
+      cond do
+        true ->
+          DateTime.diff(
+            to_timezone(original_event.dtend, calendar_timezone),
+            to_timezone(original_event.dtstart, calendar_timezone),
+            :second
+          )
       end
-    )
-  end
 
-  defp shift_event(event, shift_opts) do
-    Map.merge(event, %{
-      dtstart: shift_date(event.dtstart, shift_opts),
-      dtend: shift_date(event.dtend, shift_opts),
-      rrule: Map.put(event.rrule, :is_recurrence, true)
-    })
-  end
+    final_dtstart = to_timezone(new_dtstart, calendar_timezone)
 
-  defp shift_date(date, shift_opts) do
-    result =
-      case Timex.shift(date, shift_opts) do
-        %Timex.AmbiguousDateTime{} = new_date ->
-          new_date.after
-
-        new_date ->
-          new_date
+    final_dtend =
+      cond do
+        true ->
+          DateTime.add(final_dtstart, duration, :second)
       end
 
-    # Truncate microseconds to match expected format
-    DateTime.truncate(result, :second)
+    %{
+      original_event
+      | dtstart: final_dtstart,
+        dtend: final_dtend,
+        rrule: original_event.rrule
+    }
   end
 
-  defp build_refernce_events_by_x_rules(event, by_x_rrules) do
-    by_x_rrules
-    |> Map.keys()
-    |> Enum.map(fn by_x ->
-      build_refernce_events_by_x_rule(event, by_x)
-    end)
-    |> List.flatten()
+  # Helper function to detect Google Calendar from PRODID
+  defp is_google_calendar?(prodid) when is_binary(prodid) do
+    prodid_upper = String.upcase(prodid)
+    String.contains?(prodid_upper, "GOOGLE") and String.contains?(prodid_upper, "CALENDAR")
   end
 
-  @valid_days ["SU", "MO", "TU", "WE", "TH", "FR", "SA"]
-  @day_values %{su: 0, mo: 1, tu: 2, we: 3, th: 4, fr: 5, sa: 6}
-
-  defp build_refernce_events_by_x_rule(
-         %{rrule: %{byday: bydays}} = event,
-         :byday
-       ) do
-    # Use logical datetime for weekday calculations to handle X-WR-TIMEZONE correctly
-    logical_dtstart = get_logical_datetime(event)
-    logical_dtend = get_logical_datetime(event, :dtend)
-
-    bydays
-    |> Enum.map(fn byday ->
-      if byday in @valid_days do
-        day_atom = byday |> String.downcase() |> String.to_atom()
-
-        # determine the difference between the byday and the logical dtstart
-        day_offset_for_reference = Map.get(@day_values, day_atom) - Timex.weekday(logical_dtstart)
-
-        # For X-WR-TIMEZONE date-only conversions, we should use the original event's
-        # datetime and shift by days, preserving the timezone conversion pattern
-        {reference_dtstart, reference_dtend} =
-          case event.x_wr_timezone do
-            nil ->
-              # No X-WR-TIMEZONE, shift the logical datetime (which is the same as original)
-              shifted_logical_dtstart =
-                Timex.shift(logical_dtstart, days: day_offset_for_reference)
-
-              shifted_logical_dtend = Timex.shift(logical_dtend, days: day_offset_for_reference)
-              {shifted_logical_dtstart, shifted_logical_dtend}
-
-            timezone when is_binary(timezone) ->
-              # Has X-WR-TIMEZONE, check if this is a date-only conversion case
-              if is_likely_converted_date_only_value?(event.dtstart, timezone) do
-                # For date-only conversions, shift the original converted datetime by days
-                # This preserves the timezone conversion pattern (e.g., Auckland midnight → UTC time)
-                reference_dtstart = Timex.shift(event.dtstart, days: day_offset_for_reference)
-                reference_dtend = Timex.shift(event.dtend, days: day_offset_for_reference)
-                {reference_dtstart, reference_dtend}
-              else
-                # Not a date-only conversion, use logical datetime shift
-                shifted_logical_dtstart =
-                  Timex.shift(logical_dtstart, days: day_offset_for_reference)
-
-                shifted_logical_dtend = Timex.shift(logical_dtend, days: day_offset_for_reference)
-                {shifted_logical_dtstart, shifted_logical_dtend}
-              end
-          end
-
-        Map.merge(event, %{
-          dtstart: DateTime.truncate(reference_dtstart, :second),
-          dtend: DateTime.truncate(reference_dtend, :second)
-        })
-      else
-        # Ignore the invalid byday value
-        nil
-      end
-    end)
-    |> Enum.filter(&(!is_nil(&1)))
-  end
-
-  defp remove_excluded_dates(recurrences, original_event) do
-    Enum.filter(recurrences, fn new_event ->
-      # Make sure new event doesn't fall on an EXDATE
-      falls_on_exdate = not is_nil(new_event) and new_event.dtstart in new_event.exdates
-
-      #  This removes any events which were created as references
-      is_invalid_reference_event =
-        DateTime.compare(new_event.dtstart, original_event.dtstart) == :lt
-
-      !falls_on_exdate &&
-        !is_invalid_reference_event
-    end)
-  end
+  defp is_google_calendar?(nil), do: false
 end

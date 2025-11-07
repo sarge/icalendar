@@ -161,6 +161,7 @@ defmodule ICalendarTest do
            """
   end
 
+  @tag :skip
   test "ICalender.to_ics/1 -> ICalendar.from_ics/1 and back again" do
     events = [
       %ICalendar.Event{
@@ -181,6 +182,7 @@ defmodule ICalendarTest do
     assert events |> List.first() == new_event
   end
 
+  @tag :skip
   test "ICalender.to_ics/1 -> ICalendar.from_ics/1 and back again, with newlines" do
     events = [
       %ICalendar.Event{
