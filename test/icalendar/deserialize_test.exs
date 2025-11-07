@@ -304,5 +304,37 @@ defmodule ICalendar.DeserializeTest do
       # EXDATE should also be interpreted in the timezone and converted to UTC
       assert event.exdates == [~D[2025-11-16]]
     end
+
+    test "with TRANSP property - OPAQUE" do
+      ics = """
+      BEGIN:VEVENT
+      SUMMARY:Busy Meeting
+      DTSTART:20151224T083000Z
+      DTEND:20151224T084500Z
+      TRANSP:OPAQUE
+      END:VEVENT
+      """
+
+      [event] = ICalendar.from_ics(ics)
+
+      assert event.transp == "opaque"
+      assert event.summary == "Busy Meeting"
+    end
+
+    test "with TRANSP property - TRANSPARENT" do
+      ics = """
+      BEGIN:VEVENT
+      SUMMARY:Free Time Activity
+      DTSTART:20151224T083000Z
+      DTEND:20151224T084500Z
+      TRANSP:TRANSPARENT
+      END:VEVENT
+      """
+
+      [event] = ICalendar.from_ics(ics)
+
+      assert event.transp == "transparent"
+      assert event.summary == "Free Time Activity"
+    end
   end
 end

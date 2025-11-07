@@ -11,6 +11,14 @@ defmodule ICalendar.RecurrenceFloatingDateTimeTest do
       ) do
     start = ICalendar.Value.to_ics(dtstart)
 
+    # if the rrule does not contain LOCAL-TZID=UTC then we need to add it
+    rrule =
+      if String.contains?(rrule, "LOCAL-TZID") do
+        rrule
+      else
+        rrule <> ";LOCAL-TZID=UTC"
+      end
+
     """
     BEGIN:VCALENDAR
     CALSCALE:GREGORIAN

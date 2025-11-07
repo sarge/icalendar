@@ -61,6 +61,10 @@ defmodule ICalendar.Util.KV do
     build_sanitized(key, Value.to_ics(value |> to_string |> String.upcase()))
   end
 
+  def build("TRANSP" = key, value) do
+    build_sanitized(key, Value.to_ics(value |> to_string |> String.upcase()))
+  end
+
   def build("GEO" = key, {lat, lon}) do
     "#{key}:#{lat};#{lon}\n"
   end

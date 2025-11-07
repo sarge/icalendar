@@ -1,6 +1,11 @@
 defmodule ICalendar.Event do
   @moduledoc """
   Calendars have events.
+
+  ## Fields
+
+  - `transp`: Time transparency. Can be "opaque" (blocks time/busy) or "transparent" (does not block time/free time).
+    According to RFC 5545, the default value is "opaque" if not specified.
   """
 
   defstruct summary: nil,
@@ -23,7 +28,8 @@ defmodule ICalendar.Event do
             organizer: nil,
             sequence: nil,
             attendees: [],
-            x_wr_timezone: nil
+            x_wr_timezone: nil,
+            transp: nil
 end
 
 defimpl ICalendar.Serialize, for: ICalendar.Event do

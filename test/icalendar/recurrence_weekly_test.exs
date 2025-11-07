@@ -5,6 +5,14 @@ defmodule ICalendar.RecurrenceWeeklyTest do
   def create_ical_event(%DateTime{} = dtstart, rrule, timezone \\ nil, take \\ 5) do
     start = ICalendar.Value.to_ics(dtstart)
 
+    # if the rrule does not contain LOCAL-TZID=UTC then we need to add it
+    rrule =
+      if String.contains?(rrule, "LOCAL-TZID") do
+        rrule
+      else
+        rrule <> ";LOCAL-TZID=UTC"
+      end
+
     """
     BEGIN:VCALENDAR
     CALSCALE:GREGORIAN

@@ -198,4 +198,36 @@ defmodule ICalendar.EventTest do
            END:VEVENT
            """
   end
+
+  test "ICalendar.to_ics/1 with TRANSP opaque" do
+    ics =
+      %Event{
+        summary: "Busy Meeting",
+        transp: "opaque"
+      }
+      |> ICalendar.to_ics()
+
+    assert ics == """
+           BEGIN:VEVENT
+           SUMMARY:Busy Meeting
+           TRANSP:OPAQUE
+           END:VEVENT
+           """
+  end
+
+  test "ICalendar.to_ics/1 with TRANSP transparent" do
+    ics =
+      %Event{
+        summary: "Free Time Activity",
+        transp: "transparent"
+      }
+      |> ICalendar.to_ics()
+
+    assert ics == """
+           BEGIN:VEVENT
+           SUMMARY:Free Time Activity
+           TRANSP:TRANSPARENT
+           END:VEVENT
+           """
+  end
 end

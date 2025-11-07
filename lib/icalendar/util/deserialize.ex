@@ -230,6 +230,13 @@ defmodule ICalendar.Util.Deserialize do
     %{acc | url: url |> desanitized() |> String.downcase()}
   end
 
+  def parse_attr(
+        %Property{key: "TRANSP", value: transp},
+        acc
+      ) do
+    %{acc | transp: transp |> desanitized() |> String.downcase()}
+  end
+
   def parse_attr(_, acc), do: acc
 
   @doc ~S"""

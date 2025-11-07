@@ -5,6 +5,14 @@ defmodule ICalendar.RecurrenceYearlyTest do
   def create_ical_event(%DateTime{} = dtstart, rrule, timezone \\ nil, take \\ 5) do
     start = ICalendar.Value.to_ics(dtstart)
 
+    # if the rrule does not contain LOCAL-TZID=UTC then we need to add it
+    rrule =
+      if String.contains?(rrule, "LOCAL-TZID") do
+        rrule
+      else
+        rrule <> ";LOCAL-TZID=UTC"
+      end
+
     """
     BEGIN:VCALENDAR
     CALSCALE:GREGORIAN
@@ -181,7 +189,6 @@ defmodule ICalendar.RecurrenceYearlyTest do
              ]
     end
 
-
     test "FREQ=YEARLY;BYMONTHDAY=1,15;BYMONTH=1,7" do
       results =
         create_ical_event(
@@ -201,7 +208,6 @@ defmodule ICalendar.RecurrenceYearlyTest do
   end
 
   describe "FREQ=YEARLY - With BYYEARDAY (currently not supported)" do
-
     test "FREQ=YEARLY;BYYEARDAY=100" do
       results =
         create_ical_event(
@@ -285,14 +291,13 @@ defmodule ICalendar.RecurrenceYearlyTest do
                # -1
                ~U[2026-12-31 07:00:00Z],
                # -365 in non-leap year
-               ~U[2027-01-01 07:00:00Z],
+               ~U[2027-01-01 07:00:00Z]
              ]
     end
   end
 
   describe "FREQ=YEARLY - With BYWEEKNO (currently not supported)" do
-
-    #TODO: need to investigate what google does here too
+    # TODO: need to investigate what google does here too
     # https://github.com/fmeringdal/rust-rrule/issues/127
     @tag :skip
     test "FREQ=YEARLY;BYWEEKNO=20" do
@@ -310,10 +315,9 @@ defmodule ICalendar.RecurrenceYearlyTest do
                ~U[2026-05-11 07:00:00Z],
                ~U[2027-05-17 07:00:00Z],
                ~U[2028-05-15 07:00:00Z],
-               ~U[2029-05-14 07:00:00Z],
-              ]
+               ~U[2029-05-14 07:00:00Z]
+             ]
     end
-
 
     test "FREQ=YEARLY;BYWEEKNO=1,20,53" do
       results =
@@ -332,11 +336,9 @@ defmodule ICalendar.RecurrenceYearlyTest do
                ~U[2025-05-13 07:00:00Z],
                ~U[2025-05-14 07:00:00Z],
                ~U[2025-05-15 07:00:00Z],
-               ~U[2025-05-16 07:00:00Z],
-              ]
-
+               ~U[2025-05-16 07:00:00Z]
+             ]
     end
-
 
     test "FREQ=YEARLY;BYDAY=MO;BYWEEKNO=20" do
       results =
@@ -358,7 +360,6 @@ defmodule ICalendar.RecurrenceYearlyTest do
   end
 
   describe "FREQ=YEARLY - With BYDAY (currently not supported)" do
-
     test "FREQ=YEARLY;BYDAY=20MO" do
       results =
         create_ical_event(
@@ -376,7 +377,6 @@ defmodule ICalendar.RecurrenceYearlyTest do
                ~U[2029-05-14 07:00:00Z]
              ]
     end
-
 
     test "FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10" do
       results =
@@ -396,7 +396,6 @@ defmodule ICalendar.RecurrenceYearlyTest do
              ]
     end
 
-
     test "FREQ=YEARLY;BYDAY=1SU;BYMONTH=4" do
       results =
         create_ical_event(
@@ -414,7 +413,6 @@ defmodule ICalendar.RecurrenceYearlyTest do
                ~U[2029-04-01 07:00:00Z]
              ]
     end
-
 
     test "FREQ=YEARLY;BYDAY=1SU;BYMONTH=4,10" do
       results =
@@ -465,7 +463,6 @@ defmodule ICalendar.RecurrenceYearlyTest do
       # Next occurrences depend on implementation
       assert length(results) >= 1
     end
-
 
     test "FREQ=YEARLY with BYHOUR (currently not supported)" do
       results =

@@ -25,7 +25,7 @@ defmodule ICalendar.Mixfile do
   defp deps do
     [
       {:timex, "~> 3.4"},
-      {:rrule_ext, "~> 0.15.5"},
+      {:rrule_ext, "~> 0.16.7"},
       {:mix_test_watch, ">= 0.0.0", only: :dev},
       {:ex_doc, ">= 0.0.0", only: [:dev, :test], runtime: false}
     ]

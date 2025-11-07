@@ -5,6 +5,14 @@ defmodule ICalendar.RecurrenceDailyTest do
   def create_ical_event(dtstart, rrule, timezone \\ nil, take \\ 5) do
     start = ICalendar.Value.to_ics(dtstart)
 
+    # if the rrule does not contain LOCAL-TZID=UTC then we need to add it
+    rrule =
+      if String.contains?(rrule, "LOCAL-TZID") do
+        rrule
+      else
+        rrule <> ";LOCAL-TZID=UTC"
+      end
+
     """
     BEGIN:VCALENDAR
     CALSCALE:GREGORIAN
@@ -136,17 +144,17 @@ defmodule ICalendar.RecurrenceDailyTest do
       results =
         create_ical_event(
           ~U[2025-10-17 09:00:00Z],
-          "FREQ=DAILY;BYHOUR=9,12,15"
+          "FREQ=DAILY;BYHOUR=9,12,15;LOCAL-TZID=UTC"
         )
 
       # Should create 3 events per day at 9, 12, and 15 hours
-      assert [
+      assert results == [
                ~U[2025-10-17 09:00:00Z],
                ~U[2025-10-17 12:00:00Z],
                ~U[2025-10-17 15:00:00Z],
                ~U[2025-10-18 09:00:00Z],
                ~U[2025-10-18 12:00:00Z]
-             ] = results
+             ]
     end
 
     test "FREQ=DAILY;BYHOUR=9,12,15 include the DTSTART time if it missing" do

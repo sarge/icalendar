@@ -78,8 +78,8 @@ defmodule ICalendar.Recurrence do
       ) do
     # timezone fallback
     calendar_timezone =
-      event.x_wr_timezone ||
-        user_timezone ||
+      user_timezone ||
+        event.x_wr_timezone ||
         "Etc/UTC"
 
     case event.rrule_str do
@@ -87,31 +87,13 @@ defmodule ICalendar.Recurrence do
         []
 
       rrule ->
-        # Append X-INCLUDE-DTSTART=TRUE for Google Calendar (detected via PRODID)
-        is_google_calendar = is_google_calendar?(event.prodid)
-
         enhanced_rrule =
-          if is_google_calendar do
-            # Check if X-INCLUDE-DTSTART is already present to avoid duplicates
-            if String.contains?(String.upcase(rrule), "X-INCLUDE-DTSTART") do
-              rrule
-            else
-              # Find the RRULE line and append X-INCLUDE-DTSTART=TRUE to it
-              rrule_lines = String.split(rrule, "\n")
-              enhanced_lines = Enum.map(rrule_lines, fn line ->
-                if String.starts_with?(String.upcase(line), "RRULE:") do
-                  line <> ";X-INCLUDE-DTSTART=TRUE"
-                else
-                  line
-                end
-              end)
-              Enum.join(enhanced_lines, "\n")
-            end
-          else
-            rrule
-          end
+          rrule
+          |> append_google_include_dtstart(event)
+          |> append_local_tzid(event, calendar_timezone)
 
         rrule_upper = String.upcase(enhanced_rrule)
+
         if String.contains?(rrule_upper, "RRULE") or String.contains?(rrule_upper, "RDATE") do
           {:ok, {occurrences, _has_more}} =
             RRule.all_between(
@@ -126,6 +108,48 @@ defmodule ICalendar.Recurrence do
         else
           []
         end
+    end
+  end
+
+  defp append_google_include_dtstart(rrule, event) do
+    # Append X-INCLUDE-DTSTART=TRUE for Google Calendar (detected via PRODID)
+    is_google_calendar = is_google_calendar?(event.prodid)
+
+    if is_google_calendar && !String.contains?(String.upcase(rrule), "X-INCLUDE-DTSTART") do
+      # Split by lines and only append X-INCLUDE-DTSTART to RRULE lines
+      rrule
+      |> String.split("\n")
+      |> Enum.map(fn line ->
+        line_upper = String.upcase(line)
+        if String.starts_with?(line_upper, "RRULE:") do
+          line <> ";X-INCLUDE-DTSTART=TRUE"
+        else
+          line
+        end
+      end)
+      |> Enum.join("\n")
+    else
+      rrule
+    end
+  end
+
+  defp append_local_tzid(rrule, _event, calendar_timezone) do
+    # Append LOCAL-TZID if not already present
+    if String.contains?(rrule, "LOCAL-TZID") do
+      rrule
+    else
+      # Split by lines and only append LOCAL-TZID to RRULE lines
+      rrule
+      |> String.split("\n")
+      |> Enum.map(fn line ->
+        line_upper = String.upcase(line)
+        if String.starts_with?(line_upper, "RRULE:") do
+          line <> ";LOCAL-TZID=" <> calendar_timezone
+        else
+          line
+        end
+      end)
+      |> Enum.join("\n")
     end
   end
 

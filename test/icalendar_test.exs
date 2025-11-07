@@ -170,7 +170,7 @@ defmodule ICalendarTest do
         dtend: Timex.to_datetime({{2015, 12, 24}, {8, 45, 00}}),
         description: "Let's go see Star Wars, and have fun.",
         location: "123 Fun Street, Toronto ON, Canada",
-        url: "http://www.example.com",
+        url: "http://www.example.com"
       }
     ]
 
